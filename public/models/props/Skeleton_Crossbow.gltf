@@ -1,0 +1,216 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1752,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 785,
+      "max": [
+        25663,
+        11737,
+        32767
+      ],
+      "min": [
+        -25663,
+        -11737,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 785,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 785,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 3504,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 618,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 1752
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3504,
+      "byteLength": 6280,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 620,
+          "byteLength": 4459,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 785
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 9784,
+      "byteLength": 3140,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 5080,
+          "byteLength": 2493,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 785
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 12924,
+      "byteLength": 6280,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 7576,
+          "byteLength": 4014,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 785
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "skeleton_texture",
+      "mimeType": "image/png",
+      "uri": "skeleton_texture.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Skeleton_Crossbow.bin",
+      "byteLength": 11592
+    },
+    {
+      "byteLength": 19204,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "skeleton",
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.5,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Skeleton_Crossbow",
+      "translation": [
+        0,
+        0.08284533768892288,
+        0.4317329525947571
+      ],
+      "scale": [
+        0.7094224095344543,
+        0.7094224095344543,
+        0.7094224095344543
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

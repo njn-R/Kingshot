@@ -6,6 +6,16 @@
 <title>Palisade</title>
 <meta name="description" content="Chop wood, raise towers and hold your walls against a horde of skeletons in this free medieval browser game." />
 <meta name="theme-color" content="#2b1a10" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta property="og:title" content="Palisade" />
+<meta property="og:description" content="Chop wood, raise towers and hold your walls against a horde of skeletons. Free to play in your browser." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://njn-r.github.io/Kingshot/share.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Palisade" />
+<meta name="twitter:description" content="Chop wood, raise towers and hold your walls against a horde of skeletons." />
+<meta name="twitter:image" content="https://njn-r.github.io/Kingshot/share.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232b1a10'/%3E%3Cpath fill='%23e6b84a' d='M5 27V11l3-5 3 5v16zm8 0V8l3-5 3 5v19zm8 0V11l3-5 3 5v16z'/%3E%3Cpath fill='%23b3202c' d='M3 16h26v4H3z'/%3E%3C/svg%3E" />
 <style>
   :root{
@@ -122,6 +132,19 @@
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;background:#2a2118;z-index:3}
   @media (max-height:480px){#logo{flex:none;height:96px;width:auto}#tag{display:none}#menu{gap:10px;padding:8px 16px 18px}#maps{flex-wrap:nowrap;gap:8px}.map{flex:1 1 0;min-width:0;padding:8px}.map span{display:none}.map i{width:34px;height:42px}.map strong{font-size:18px}#keep{padding:6px 14px}#keep p{display:none}}
   @media (max-width:560px){#wave,#kills,#level{font-size:15px}#hud{gap:8px;padding:5px 8px}}
+  #loadBox{display:flex;flex-direction:column;align-items:center;gap:12px}
+  #loadBar{width:min(70vw,320px);height:10px;background:#1c100a;border:2px solid var(--brass-lo);border-radius:5px;overflow:hidden}
+  #loadBar i{display:block;height:100%;width:0;background:linear-gradient(#f1cf85,#c8953f);transition:width .15s}
+  #settings{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#160d07e6;padding:14px;box-sizing:border-box;z-index:4;overflow-y:auto}
+  #settings h2{margin:0;font-size:clamp(24px,5vw,34px)}
+  #settings h3{margin:6px 0 0;font-size:18px;color:var(--brass)}
+  .setList,#keyList{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:8px;width:min(100%,620px)}
+  .setList label,.keyRow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;font-size:16px;background:var(--grain),linear-gradient(#6a4528,#46291a);border:2px solid var(--wood-lo);border-radius:6px}
+  .setList input[type=range]{width:46%;accent-color:var(--brass)}
+  .setList input[type=checkbox]{width:22px;height:22px;accent-color:var(--brass)}
+  .setList select{font:16px Georgia,serif;color:var(--ink);background:var(--parchment);border:2px solid var(--wood-lo);border-radius:4px;padding:4px 8px}
+  .keyRow button{padding:5px 12px;font-size:14px;min-width:110px}
+  .keyRow button.listen{background:linear-gradient(#ffe7a8,#e6b84a)}
 </style>
 </head>
 <body>
@@ -134,7 +157,7 @@
   <button id="pause" type="button">Pause</button>
   <div id="abilities"><button id="volley" class="ability ready" type="button" aria-label="Volley, key Q">Volley<kbd>Q</kbd></button><button id="bash" class="ability ready" type="button" aria-label="Shield bash, key E">Bash<kbd>E</kbd></button></div>
   <div id="tip" class="plank"><span id="tipText"></span><button id="tipSkip" class="quiet" type="button">Skip</button></div>
-  <div id="paused"><h1>Paused</h1><div class="actions"><button id="resume" type="button">Resume</button><button id="abandon" class="quiet" type="button">Abandon run</button></div></div>
+  <div id="paused"><h1>Paused</h1><div class="actions"><button id="resume" type="button">Resume</button><button id="pauseSettings" class="quiet" type="button">Settings</button><button id="abandon" class="quiet" type="button">Abandon run</button></div></div>
   <div id="boss"><span id="bossName"></span><div id="bossFill"></div></div>
   <div id="banner"></div>
   <div id="cards"></div>
@@ -159,7 +182,7 @@
     </svg>
     <p id="tag">Chop, build and hold the walls against the bone horde.</p>
     <div id="maps"></div>
-    <div id="menuFoot"><span>Treasury <b id="treasury">0</b></span><button id="openKeep" class="quiet" type="button">The Keep</button></div>
+    <div id="menuFoot"><span>Treasury <b id="treasury">0</b></span><button id="openKeep" class="quiet" type="button">The Keep</button><button id="openSettings" class="quiet" type="button">Settings</button></div>
     <p id="credits">Art by KayKit and Kenney (CC0)</p>
   </div>
 
@@ -170,7 +193,22 @@
     <button id="closeKeep" type="button">Back</button>
   </div>
 
-  <div id="load">Raising the walls…</div>
+  <div id="settings">
+    <h2>Settings</h2>
+    <div class="setList">
+      <label>Sound <input id="setSfx" type="range" min="0" max="100" /></label>
+      <label>Music <input id="setMusic" type="range" min="0" max="100" /></label>
+      <label>Screen shake <input id="setShake" type="checkbox" /></label>
+      <label>Vibration <input id="setVibrate" type="checkbox" /></label>
+      <label>Quality <select id="setQuality"><option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+      <label>Touch stick <select id="setJoystick"><option value="floating">Floating</option><option value="left">Fixed left</option><option value="right">Fixed right</option></select></label>
+    </div>
+    <h3>Keys</h3>
+    <div id="keyList"></div>
+    <div class="actions"><button id="resetKeys" class="quiet" type="button">Reset keys</button><button id="closeSettings" type="button">Back</button></div>
+  </div>
+
+  <div id="load"><div id="loadBox"><span id="loadText">Raising the walls…</span><div id="loadBar"><i></i></div></div></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

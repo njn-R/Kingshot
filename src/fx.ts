@@ -52,7 +52,8 @@ export class Fx {
   private time = 0;
   private dummy = new THREE.Object3D();
   private color = new THREE.Color();
-  private shakeScale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
+  private reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private shakeScale = this.reducedMotion ? 0 : 1;
 
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_PARTICLES);
@@ -121,6 +122,9 @@ export class Fx {
     r.life = RING_LIFE;
     r.radius = radius;
   }
+
+  /** Turns screen shake off, or on unless the system asks for reduced motion. */
+  setShake(on: boolean): void { this.shakeScale = on && !this.reducedMotion ? 1 : 0; }
 
   /** Adds screen shake; 1 is the strongest. */
   shake(amount: number): void {

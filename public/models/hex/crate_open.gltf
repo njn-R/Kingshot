@@ -1,136 +1,216 @@
 {
-    "asset" : {
-        "generator" : "Khronos glTF Blender I/O v3.4.50",
-        "version" : "2.0"
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 780,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
     },
-    "scene" : 0,
-    "scenes" : [
-        {
-            "name" : "Scene",
-            "nodes" : [
-                0
-            ]
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 328,
+      "max": [
+        32767,
+        20322,
+        19766
+      ],
+      "min": [
+        -32767,
+        -20322,
+        -19766
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 328,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 328,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 1560,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 284,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 780
         }
-    ],
-    "nodes" : [
-        {
-            "mesh" : 0,
-            "name" : "crate_open"
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1560,
+      "byteLength": 2624,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 284,
+          "byteLength": 1813,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 328
         }
-    ],
-    "materials" : [
-        {
-            "name" : "hexagons_medieval",
-            "pbrMetallicRoughness" : {
-                "baseColorTexture" : {
-                    "index" : 0
-                },
-                "metallicFactor" : 0,
-                "roughnessFactor" : 0.5
-            }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4184,
+      "byteLength": 1312,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2100,
+          "byteLength": 1014,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 328
         }
-    ],
-    "meshes" : [
-        {
-            "name" : "crate_open",
-            "primitives" : [
-                {
-                    "attributes" : {
-                        "POSITION" : 0,
-                        "TEXCOORD_0" : 1,
-                        "NORMAL" : 2
-                    },
-                    "indices" : 3,
-                    "material" : 0
-                }
-            ]
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5496,
+      "byteLength": 2624,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3116,
+          "byteLength": 1127,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 328
         }
-    ],
-    "textures" : [
-        {
-            "sampler" : 0,
-            "source" : 0
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "hexagons_medieval",
+      "mimeType": "image/png",
+      "uri": "hexagons_medieval.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "crate_open.bin",
+      "byteLength": 4244
+    },
+    {
+      "byteLength": 8120,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
         }
-    ],
-    "images" : [
-        {
-            "mimeType" : "image/png",
-            "name" : "hexagons_medieval",
-            "uri" : "hexagons_medieval.png"
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "hexagons_medieval",
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.5,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
         }
-    ],
-    "accessors" : [
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "crate_open",
+      "primitives": [
         {
-            "bufferView" : 0,
-            "componentType" : 5126,
-            "count" : 328,
-            "max" : [
-                0.23156796395778656,
-                0.20000101625919342,
-                0.10000000894069672
-            ],
-            "min" : [
-                -0.10000000149011612,
-                -0.005638472735881805,
-                -0.10000000894069672
-            ],
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 1,
-            "componentType" : 5126,
-            "count" : 328,
-            "type" : "VEC2"
-        },
-        {
-            "bufferView" : 2,
-            "componentType" : 5126,
-            "count" : 328,
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 3,
-            "componentType" : 5123,
-            "count" : 780,
-            "type" : "SCALAR"
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
         }
-    ],
-    "bufferViews" : [
-        {
-            "buffer" : 0,
-            "byteLength" : 3936,
-            "byteOffset" : 0,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 2624,
-            "byteOffset" : 3936,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 3936,
-            "byteOffset" : 6560,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 1560,
-            "byteOffset" : 10496,
-            "target" : 34963
-        }
-    ],
-    "samplers" : [
-        {
-            "magFilter" : 9729,
-            "minFilter" : 9987
-        }
-    ],
-    "buffers" : [
-        {
-            "byteLength" : 12056,
-            "uri" : "crate_open.bin"
-        }
-    ]
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "crate_open",
+      "translation": [
+        0.06578398123383522,
+        0.09718127176165581,
+        0
+      ],
+      "scale": [
+        0.16578398272395134,
+        0.16578398272395134,
+        0.16578398272395134
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
 }

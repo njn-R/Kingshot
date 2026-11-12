@@ -1,185 +1,291 @@
 {
-    "asset" : {
-        "generator" : "Khronos glTF Blender I/O v3.4.50",
-        "version" : "2.0"
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2052,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
     },
-    "scene" : 0,
-    "scenes" : [
-        {
-            "name" : "Scene",
-            "nodes" : [
-                0
-            ]
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 802,
+      "max": [
+        18874,
+        2568,
+        32767
+      ],
+      "min": [
+        2540,
+        -2568,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 802,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 802,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 802,
+      "max": [
+        -16,
+        36,
+        4848
+      ],
+      "min": [
+        -16758,
+        -36,
+        -4848
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 802,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 4104,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 735,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 2052
         }
-    ],
-    "nodes" : [
-        {
-            "mesh" : 0,
-            "name" : "bow_withString"
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4104,
+      "byteLength": 6416,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 736,
+          "byteLength": 3976,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 802
         }
-    ],
-    "materials" : [
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 10520,
+      "byteLength": 3208,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4712,
+          "byteLength": 2139,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 802
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 13728,
+      "byteLength": 6416,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 6852,
+          "byteLength": 4185,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 802
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 20144,
+      "byteLength": 6416,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 11040,
+          "byteLength": 2777,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 802
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 26560,
+      "byteLength": 6416,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 13820,
+          "byteLength": 4095,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 802
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "ranger_texture",
+      "mimeType": "image/png",
+      "uri": "ranger_texture.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "bow_withString.bin",
+      "byteLength": 17916
+    },
+    {
+      "byteLength": 32976,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "ranger",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.5,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "bow_withString",
+      "extras": {
+        "targetNames": [
+          "Draw"
+        ]
+      },
+      "primitives": [
         {
-            "doubleSided" : true,
-            "name" : "ranger",
-            "pbrMetallicRoughness" : {
-                "baseColorTexture" : {
-                    "index" : 0
-                },
-                "metallicFactor" : 0,
-                "roughnessFactor" : 0.5
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0,
+          "targets": [
+            {
+              "POSITION": 4,
+              "NORMAL": 5
             }
+          ]
         }
-    ],
-    "meshes" : [
-        {
-            "extras" : {
-                "targetNames" : [
-                    "Draw"
-                ]
-            },
-            "name" : "bow_withString",
-            "primitives" : [
-                {
-                    "attributes" : {
-                        "POSITION" : 0,
-                        "TEXCOORD_0" : 1,
-                        "NORMAL" : 2
-                    },
-                    "indices" : 3,
-                    "material" : 0,
-                    "targets" : [
-                        {
-                            "POSITION" : 4,
-                            "NORMAL" : 5
-                        }
-                    ]
-                }
-            ],
-            "weights" : [
-                0
-            ]
-        }
-    ],
-    "textures" : [
-        {
-            "sampler" : 0,
-            "source" : 0
-        }
-    ],
-    "images" : [
-        {
-            "mimeType" : "image/png",
-            "name" : "ranger_texture",
-            "uri" : "ranger_texture.png"
-        }
-    ],
-    "accessors" : [
-        {
-            "bufferView" : 0,
-            "componentType" : 5126,
-            "count" : 802,
-            "max" : [
-                0.12819603085517883,
-                0.07779941707849503,
-                0.9918521642684937
-            ],
-            "min" : [
-                -0.36619606614112854,
-                -0.07779943197965622,
-                -0.9918521642684937
-            ],
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 1,
-            "componentType" : 5126,
-            "count" : 802,
-            "type" : "VEC2"
-        },
-        {
-            "bufferView" : 2,
-            "componentType" : 5126,
-            "count" : 802,
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 3,
-            "componentType" : 5123,
-            "count" : 2052,
-            "type" : "SCALAR"
-        },
-        {
-            "bufferView" : 4,
-            "componentType" : 5126,
-            "count" : 802,
-            "max" : [
-                -0.0004337318241596222,
-                0.001040344126522541,
-                0.14671479165554047
-            ],
-            "min" : [
-                -0.5072237253189087,
-                -0.0010403292253613472,
-                -0.14671340584754944
-            ],
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 5,
-            "componentType" : 5126,
-            "count" : 802,
-            "type" : "VEC3"
-        }
-    ],
-    "bufferViews" : [
-        {
-            "buffer" : 0,
-            "byteLength" : 9624,
-            "byteOffset" : 0,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 6416,
-            "byteOffset" : 9624,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 9624,
-            "byteOffset" : 16040,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 4104,
-            "byteOffset" : 25664,
-            "target" : 34963
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 9624,
-            "byteOffset" : 29768,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 9624,
-            "byteOffset" : 39392,
-            "target" : 34962
-        }
-    ],
-    "samplers" : [
-        {
-            "magFilter" : 9729,
-            "minFilter" : 9987
-        }
-    ],
-    "buffers" : [
-        {
-            "byteLength" : 49016,
-            "uri" : "bow_withString.bin"
-        }
-    ]
+      ],
+      "weights": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "bow_withString",
+      "translation": [
+        -0.4431257098913193,
+        -7.450580596923828e-9,
+        0
+      ],
+      "scale": [
+        0.9918521642684937,
+        0.9918521642684937,
+        0.9918521642684937
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
 }

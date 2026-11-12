@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "sim": "vite-node scripts/wavesim.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "images": "node scripts/make-images.mjs",
+    "assets:import": "node scripts/import-assets.mjs",
+    "assets:optimize": "node scripts/optimize-assets.mjs"
   },
   "dependencies": {
     "three": "^0.187.0"

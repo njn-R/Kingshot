@@ -15,13 +15,23 @@ export class Sfx {
   private noiseBuffer: AudioBuffer | null = null;
   private last = new Map<string, number>();
   muted = readMuted();
+  private volume = 1;
+
+  /** The context, once a user gesture has unlocked audio. */
+  get context(): AudioContext | null { return this.ctx; }
+
+  /** Master loudness, 0 to 1. */
+  setVolume(volume: number): void {
+    this.volume = volume;
+    if (this.master) this.master.gain.value = this.muted ? 0 : MASTER_VOLUME * this.volume;
+  }
 
   /** Browsers only allow audio after a user gesture, so call this from one. */
   unlock(): void {
     if (this.ctx) { if (this.ctx.state === 'suspended') void this.ctx.resume(); return; }
     const ctx = new AudioContext();
     const master = ctx.createGain();
-    master.gain.value = this.muted ? 0 : MASTER_VOLUME;
+    master.gain.value = this.muted ? 0 : MASTER_VOLUME * this.volume;
     const limiter = ctx.createDynamicsCompressor();
     master.connect(limiter).connect(ctx.destination);
     const noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
@@ -34,7 +44,7 @@ export class Sfx {
 
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.master) this.master.gain.value = this.muted ? 0 : MASTER_VOLUME;
+    if (this.master) this.master.gain.value = this.muted ? 0 : MASTER_VOLUME * this.volume;
     try { localStorage.setItem(STORAGE_KEY, this.muted ? '1' : '0'); } catch { /* the setting just won't persist */ }
     return this.muted;
   }

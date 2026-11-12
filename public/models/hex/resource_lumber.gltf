@@ -1,136 +1,216 @@
 {
-    "asset" : {
-        "generator" : "Khronos glTF Blender I/O v3.4.50",
-        "version" : "2.0"
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 660,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
     },
-    "scene" : 0,
-    "scenes" : [
-        {
-            "name" : "Scene",
-            "nodes" : [
-                0
-            ]
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 330,
+      "max": [
+        32767,
+        10033,
+        15789
+      ],
+      "min": [
+        -32767,
+        -10033,
+        -15789
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 330,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 330,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 1320,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 242,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 660
         }
-    ],
-    "nodes" : [
-        {
-            "mesh" : 0,
-            "name" : "resource_lumber"
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1320,
+      "byteLength": 2640,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 244,
+          "byteLength": 1687,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 330
         }
-    ],
-    "materials" : [
-        {
-            "name" : "hexagons_medieval",
-            "pbrMetallicRoughness" : {
-                "baseColorTexture" : {
-                    "index" : 0
-                },
-                "metallicFactor" : 0,
-                "roughnessFactor" : 0.5
-            }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3960,
+      "byteLength": 1320,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1932,
+          "byteLength": 999,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 330
         }
-    ],
-    "meshes" : [
-        {
-            "name" : "Cube.569",
-            "primitives" : [
-                {
-                    "attributes" : {
-                        "POSITION" : 0,
-                        "TEXCOORD_0" : 1,
-                        "NORMAL" : 2
-                    },
-                    "indices" : 3,
-                    "material" : 0
-                }
-            ]
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5280,
+      "byteLength": 2640,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2932,
+          "byteLength": 1879,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 330
         }
-    ],
-    "textures" : [
-        {
-            "sampler" : 0,
-            "source" : 0
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "hexagons_medieval",
+      "mimeType": "image/png",
+      "uri": "hexagons_medieval.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "resource_lumber.bin",
+      "byteLength": 4812
+    },
+    {
+      "byteLength": 7920,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
         }
-    ],
-    "images" : [
-        {
-            "mimeType" : "image/png",
-            "name" : "hexagons_medieval",
-            "uri" : "hexagons_medieval.png"
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "hexagons_medieval",
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.5,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
         }
-    ],
-    "accessors" : [
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.569",
+      "primitives": [
         {
-            "bufferView" : 0,
-            "componentType" : 5126,
-            "count" : 330,
-            "max" : [
-                0.3414117693901062,
-                0.20999956130981445,
-                0.1668621450662613
-            ],
-            "min" : [
-                -0.3445308208465576,
-                -1.4901161193847656e-06,
-                -0.1636335700750351
-            ],
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 1,
-            "componentType" : 5126,
-            "count" : 330,
-            "type" : "VEC2"
-        },
-        {
-            "bufferView" : 2,
-            "componentType" : 5126,
-            "count" : 330,
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 3,
-            "componentType" : 5123,
-            "count" : 660,
-            "type" : "SCALAR"
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
         }
-    ],
-    "bufferViews" : [
-        {
-            "buffer" : 0,
-            "byteLength" : 3960,
-            "byteOffset" : 0,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 2640,
-            "byteOffset" : 3960,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 3960,
-            "byteOffset" : 6600,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 1320,
-            "byteOffset" : 10560,
-            "target" : 34963
-        }
-    ],
-    "samplers" : [
-        {
-            "magFilter" : 9729,
-            "minFilter" : 9987
-        }
-    ],
-    "buffers" : [
-        {
-            "byteLength" : 11880,
-            "uri" : "resource_lumber.bin"
-        }
-    ]
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "resource_lumber",
+      "translation": [
+        -0.001559525728225708,
+        0.10499903559684753,
+        0.0016142874956130981
+      ],
+      "scale": [
+        0.3429712951183319,
+        0.3429712951183319,
+        0.3429712951183319
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
 }

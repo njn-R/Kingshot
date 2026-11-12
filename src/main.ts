@@ -5,11 +5,14 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Assets } from './assets';
 import { Game } from './game';
-import type { Input } from './hero';
 import { Hud } from './hud';
+import { InputController } from './input';
 import { createMenu } from './menu';
 import { MAPS, mapModels, type MapDef } from './maps';
+import { Music } from './music';
 import { save } from './save';
+import { settings, type Quality } from './settings';
+import { mountSettingsPanel } from './settingsUi';
 import { Sfx } from './sfx';
 
 const el = (id: string) => document.getElementById(id)!;
@@ -17,51 +20,8 @@ const el = (id: string) => document.getElementById(id)!;
 const PIXEL_CAPS = [matchMedia('(pointer: coarse)').matches ? 1.5 : 2, 1.25, 1];
 const QUALITY_SAMPLE = 2.5;
 const MIN_FPS = 34;
-
-function createInput(): () => Input {
-  const keys = new Set<string>();
-  addEventListener('keydown', (e) => keys.add(e.code));
-  addEventListener('keyup', (e) => keys.delete(e.code));
-  addEventListener('blur', () => keys.clear());
-
-  const stick = el('stick');
-  const nub = el('nub');
-  const RADIUS = 44;
-  let pointer: number | null = null;
-  let ox = 0, oy = 0, sx = 0, sz = 0;
-
-  addEventListener('pointerdown', (e) => {
-    if ((e.target as HTMLElement).closest('button')) return;
-    pointer = e.pointerId; ox = e.clientX; oy = e.clientY; sx = sz = 0;
-    stick.style.left = `${ox}px`; stick.style.top = `${oy}px`; stick.style.display = 'block';
-    nub.style.transform = '';
-  });
-  addEventListener('pointermove', (e) => {
-    if (e.pointerId !== pointer) return;
-    const dx = e.clientX - ox, dy = e.clientY - oy;
-    const len = Math.hypot(dx, dy);
-    const k = len > RADIUS ? RADIUS / len : 1;
-    nub.style.transform = `translate(${dx * k}px,${dy * k}px)`;
-    sx = len > 6 ? (dx * k) / RADIUS : 0;
-    sz = len > 6 ? (dy * k) / RADIUS : 0;
-  });
-  const end = (e: PointerEvent) => {
-    if (e.pointerId !== pointer) return;
-    pointer = null; sx = sz = 0; stick.style.display = 'none';
-  };
-  addEventListener('pointerup', end);
-  addEventListener('pointercancel', end);
-
-  return () => {
-    let x = sx, z = sz;
-    if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
-    if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
-    if (keys.has('KeyW') || keys.has('ArrowUp')) z -= 1;
-    if (keys.has('KeyS') || keys.has('ArrowDown')) z += 1;
-    const len = Math.hypot(x, z);
-    return len > 1 ? { x: x / len, z: z / len } : { x, z };
-  };
-}
+/** A fixed quality setting pins the tier; auto starts at full and steps down on slow devices. */
+const FORCED_TIER: Record<Quality, number | null> = { auto: null, high: 0, medium: 1, low: 2 };
 
 async function start(): Promise<void> {
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -73,12 +33,19 @@ async function start(): Promise<void> {
 
   const camera = new THREE.PerspectiveCamera(35, 1, 1, 220);
   const assets = new Assets();
-  await assets.load();
+  const loadText = el('loadText');
+  const loadBar = el('loadBar').firstElementChild as HTMLElement;
+  await assets.load((done, total) => {
+    loadText.textContent = `Raising the walls… ${done}/${total}`;
+    loadBar.style.width = `${(done / total) * 100}%`;
+  });
 
   const sfx = new Sfx();
+  const music = new Music(() => sfx.context);
   const hud = new Hud();
   let game: Game;
-  let tier = 0; // 0 is full quality; slow devices step down to 2.
+  let autoTier = 0; // 0 is full quality; slow devices step down to 2.
+  let tier = 0;
   const renderPass = new RenderPass(new THREE.Scene(), camera);
 
   const showLoading = (shown: boolean) => { el('load').style.display = shown ? 'flex' : 'none'; };
@@ -87,12 +54,15 @@ async function start(): Promise<void> {
   const loadMap = async (map: MapDef): Promise<void> => {
     if (game?.map === map) return;
     showLoading(true);
+    loadText.textContent = `Raising ${map.name}…`;
+    loadBar.style.width = '100%';
     await new Promise((r) => setTimeout(r, 30)); // lets the loading text paint first
     await assets.ensure(mapModels(map));
     game?.dispose();
     game = new Game(assets, camera, hud, sfx, map);
     renderPass.scene = game.scene;
     game.setShadows(tier < 2);
+    game.setShake(settings.data.shake);
     if (import.meta.env.DEV) Object.assign(window, { game });
     showLoading(false);
   };
@@ -128,20 +98,37 @@ async function start(): Promise<void> {
   b.abilities[1].addEventListener('click', () => game.useAbility(1));
   b.resume.addEventListener('click', () => setPaused(false));
   b.abandon.addEventListener('click', showMenu);
-  addEventListener('keydown', (e) => { if ((e.code === 'Escape' || e.code === 'KeyP') && !e.repeat) setPaused(!game.paused); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
   b.toMenu.addEventListener('click', showMenu);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
 
   const mute = b.mute;
   const showMute = () => {
     mute.textContent = sfx.muted ? 'Sound off' : 'Sound on';
     mute.setAttribute('aria-pressed', String(sfx.muted));
   };
-  const toggleMute = () => { sfx.toggleMute(); showMute(); };
+  const toggleMute = () => { sfx.toggleMute(); music.setMuted(sfx.muted); showMute(); };
   showMute();
+  music.setMuted(sfx.muted);
   mute.addEventListener('click', toggleMute);
-  addEventListener('keydown', (e) => { if (e.code === 'KeyM' && !e.repeat) toggleMute(); });
   for (const type of ['pointerdown', 'keydown']) addEventListener(type, () => sfx.unlock());
+
+  const input = new InputController((action) => {
+    switch (action) {
+      case 'ability1': game.useAbility(0); break;
+      case 'ability2': game.useAbility(1); break;
+      case 'call': game.callWave(); break;
+      case 'pause': setPaused(!game.paused); break;
+      case 'mute': toggleMute(); break;
+      case 'pick1': game.pick(0); break;
+      case 'pick2': game.pick(1); break;
+      case 'pick3': game.pick(2); break;
+      case 'option1': game.chooseOption(0); break;
+      case 'option2': game.chooseOption(1); break;
+    }
+  });
+  const panel = mountSettingsPanel(input);
+  el('openSettings').addEventListener('click', () => { sfx.pick(); panel.open(); });
+  el('pauseSettings').addEventListener('click', () => { sfx.pick(); panel.open(); });
 
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, target);
@@ -160,23 +147,33 @@ async function start(): Promise<void> {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
+  const applyQuality = () => {
+    tier = FORCED_TIER[settings.data.quality] ?? autoTier;
+    bloom.enabled = tier === 0;
+    game.setShadows(tier < 2);
+    resize();
+  };
+  const applySettings = () => {
+    sfx.setVolume(settings.data.sfx);
+    music.setVolume(settings.data.music);
+    game.setShake(settings.data.shake);
+    input.setJoystick(settings.data.joystick);
+    applyQuality();
+  };
+  settings.onChange(applySettings);
   addEventListener('resize', resize);
-  resize();
+  applySettings();
 
-  const readInput = createInput();
   let last = performance.now();
-
   let sampleTime = 0, sampleFrames = 0;
   const watchFrameRate = (seconds: number) => {
     if (seconds > 0.25 || document.hidden) { sampleTime = sampleFrames = 0; return; }
     sampleTime += seconds;
     sampleFrames++;
     if (sampleTime < QUALITY_SAMPLE) return;
-    if (sampleFrames / sampleTime < MIN_FPS && tier < 2) {
-      tier++;
-      bloom.enabled = false;
-      game.setShadows(tier < 2);
-      resize();
+    if (sampleFrames / sampleTime < MIN_FPS && autoTier < 2) {
+      autoTier++;
+      if (settings.data.quality === 'auto') applyQuality();
     }
     sampleTime = sampleFrames = 0;
   };
@@ -185,10 +182,14 @@ async function start(): Promise<void> {
     const now = performance.now();
     const seconds = (now - last) / 1000;
     watchFrameRate(seconds);
-    game.update(Math.min(seconds, 0.05), readInput());
+    game.update(Math.min(seconds, 0.05), input.read());
+    music.setMode(document.body.dataset.screen === 'menu' ? 'menu' : game.paused ? 'rest' : game.mood);
+    music.update();
     last = now;
     composer.render();
   });
+
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => undefined);
 }
 
 start().catch((err) => {

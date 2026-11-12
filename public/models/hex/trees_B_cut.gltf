@@ -1,136 +1,216 @@
 {
-    "asset" : {
-        "generator" : "Khronos glTF Blender I/O v3.4.50",
-        "version" : "2.0"
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 798,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
     },
-    "scene" : 0,
-    "scenes" : [
-        {
-            "name" : "Scene",
-            "nodes" : [
-                0
-            ]
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 348,
+      "max": [
+        31455,
+        3884,
+        32767
+      ],
+      "min": [
+        -31455,
+        -3884,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 348,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 348,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 1596,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 324,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 798
         }
-    ],
-    "nodes" : [
-        {
-            "mesh" : 0,
-            "name" : "trees_B_cut"
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1596,
+      "byteLength": 2784,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 324,
+          "byteLength": 1937,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 348
         }
-    ],
-    "materials" : [
-        {
-            "name" : "hexagons_medieval",
-            "pbrMetallicRoughness" : {
-                "baseColorTexture" : {
-                    "index" : 0
-                },
-                "metallicFactor" : 0,
-                "roughnessFactor" : 0.5
-            }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4380,
+      "byteLength": 1392,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2264,
+          "byteLength": 767,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 348
         }
-    ],
-    "meshes" : [
-        {
-            "name" : "trees_B_cut",
-            "primitives" : [
-                {
-                    "attributes" : {
-                        "POSITION" : 0,
-                        "TEXCOORD_0" : 1,
-                        "NORMAL" : 2
-                    },
-                    "indices" : 3,
-                    "material" : 0
-                }
-            ]
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5772,
+      "byteLength": 2784,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3032,
+          "byteLength": 923,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 348
         }
-    ],
-    "textures" : [
-        {
-            "sampler" : 0,
-            "source" : 0
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "hexagons_medieval",
+      "mimeType": "image/png",
+      "uri": "hexagons_medieval.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "trees_B_cut.bin",
+      "byteLength": 3956
+    },
+    {
+      "byteLength": 8556,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
         }
-    ],
-    "images" : [
-        {
-            "mimeType" : "image/png",
-            "name" : "hexagons_medieval",
-            "uri" : "hexagons_medieval.png"
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "hexagons_medieval",
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.5,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
         }
-    ],
-    "accessors" : [
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "trees_B_cut",
+      "primitives": [
         {
-            "bufferView" : 0,
-            "componentType" : 5126,
-            "count" : 348,
-            "max" : [
-                0.7367650866508484,
-                0.15118496119976044,
-                0.720851480960846
-            ],
-            "min" : [
-                -0.6653304100036621,
-                -0.022003119811415672,
-                -0.7397785186767578
-            ],
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 1,
-            "componentType" : 5126,
-            "count" : 348,
-            "type" : "VEC2"
-        },
-        {
-            "bufferView" : 2,
-            "componentType" : 5126,
-            "count" : 348,
-            "type" : "VEC3"
-        },
-        {
-            "bufferView" : 3,
-            "componentType" : 5123,
-            "count" : 798,
-            "type" : "SCALAR"
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
         }
-    ],
-    "bufferViews" : [
-        {
-            "buffer" : 0,
-            "byteLength" : 4176,
-            "byteOffset" : 0,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 2784,
-            "byteOffset" : 4176,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 4176,
-            "byteOffset" : 6960,
-            "target" : 34962
-        },
-        {
-            "buffer" : 0,
-            "byteLength" : 1596,
-            "byteOffset" : 11136,
-            "target" : 34963
-        }
-    ],
-    "samplers" : [
-        {
-            "magFilter" : 9729,
-            "minFilter" : 9987
-        }
-    ],
-    "buffers" : [
-        {
-            "byteLength" : 12732,
-            "uri" : "trees_B_cut.bin"
-        }
-    ]
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "trees_B_cut",
+      "translation": [
+        0.03571733832359314,
+        0.06459092069417238,
+        -0.009463518857955933
+      ],
+      "scale": [
+        0.7303149998188019,
+        0.7303149998188019,
+        0.7303149998188019
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
 }

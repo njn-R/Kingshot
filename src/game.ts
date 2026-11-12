@@ -15,6 +15,8 @@ import type { MapDef } from './maps';
 import { Projectiles } from './projectiles';
 import { pick, rand, shuffle } from './rng';
 import { save } from './save';
+import { settings } from './settings';
+import { track } from './analytics';
 import type { Sfx } from './sfx';
 import { Tutorial } from './tutorial';
 import { Wilds, normalized, type Site } from './wilds';
@@ -117,15 +119,8 @@ export class Game {
   private frame = 0;
   private camFocus = new THREE.Vector3();
   private heroInside = true;
-  private onKey = (e: KeyboardEvent) => {
-    if (/^Digit[123]$/.test(e.code)) {
-      const i = Number(e.code[5]) - 1;
-      if (this.offered) this.chooseCard(i); else this.chooseOption(i);
-    }
-    if (e.code === 'KeyQ' && !e.repeat) this.useAbility(0);
-    if (e.code === 'KeyE' && !e.repeat) this.useAbility(1);
-    if (e.code === 'KeyC' && !e.repeat) this.callWave();
-  };
+  /** Counts for the run record and achievements. */
+  private runStats = { bosses: 0, elites: 0, camps: 0, chests: 0, built: 0 };
 
   constructor(private assets: Assets, private camera: THREE.PerspectiveCamera, private hud: Hud, readonly sfx: Sfx, readonly map: MapDef) {
     this.sun = buildLighting(this.scene, map.look);
@@ -177,7 +172,7 @@ export class Game {
       killed: (e) => this.killed(e),
       bossSpawned: () => this.hud.boss(this.map.boss.name),
       bossHealth: (fraction) => this.hud.bossHealth(fraction),
-      bossFell: () => { this.hud.boss(null); this.slowmo = BOSS_DEATH_SLOWMO; },
+      bossFell: () => { this.hud.boss(null); this.slowmo = BOSS_DEATH_SLOWMO; this.runStats.bosses++; },
     });
     this.shots = new Projectiles(this.scene, assets, this.fx, this.sfx, {
       pool: () => this.horde.pool,
@@ -197,13 +192,25 @@ export class Game {
       announce: (text) => this.hud.banner(text),
       padClearance: (x, z) => this.economy.padClearance(x, z),
     });
-    addEventListener('keydown', this.onKey);
     hud.abilityLabels([{ title: 'Volley', key: 'Q' }, { title: 'Bash', key: 'E' }]);
     this.reset();
   }
 
   get weaponId(): WeaponId { return this.hero.weapon.id; }
   get running(): boolean { return this.started && !this.over; }
+  /** What the music should play to. */
+  get mood(): 'rest' | 'fight' | 'boss' {
+    if (!this.running) return 'rest';
+    if (this.horde.boss) return 'boss';
+    return this.toSpawn.length > 0 || this.horde.waveAlive ? 'fight' : 'rest';
+  }
+
+  /** A number key or face button: picks a card if one is offered, else a wave option. */
+  pick(index: number): void {
+    if (this.offered) this.chooseCard(index); else this.chooseOption(index);
+  }
+
+  setShake(on: boolean): void { this.fx.setShake(on); }
   /** Waves past the map's last, in endless. */
   private get past(): number { return Math.max(0, this.wave - this.map.waves); }
   private get streakMul(): number { return 1 + Math.min(1, this.streak / STREAK_FULL); }
@@ -215,6 +222,7 @@ export class Game {
   start(): void {
     this.reset();
     this.started = true;
+    track('run_start', { map: this.map.id });
     if (!save.data.tutorialDone && this.map.id === 'greenhollow') this.tutorial = new Tutorial(this.scene);
   }
 
@@ -228,7 +236,6 @@ export class Game {
 
   /** Frees GPU resources; models shared through Assets are left alone. */
   dispose(): void {
-    removeEventListener('keydown', this.onKey);
     this.tutorial?.dispose();
     this.scene.traverse((o) => {
       const mesh = o as THREE.InstancedMesh & THREE.SkinnedMesh;
@@ -273,6 +280,7 @@ export class Game {
     this.hero.equip(WEAPONS.crossbow);
     this.camFocus.copy(this.hero.position);
     this.heroInside = true;
+    this.runStats = { bosses: 0, elites: 0, camps: 0, chests: 0, built: 0 };
     this.endless = false;
     this.options = null;
     this.choice = 0;
@@ -326,6 +334,7 @@ export class Game {
         this.sfx.pay(progress);
         break;
       case 'build':
+        this.runStats.built++;
         this.sfx.build();
         this.fx.burst(x, 0.6, z, DUST, 26, 9, 0.3);
         this.fx.ring(x, z, 0xffe9b0, 6);
@@ -512,6 +521,7 @@ export class Game {
 
   private endRun(won: boolean): void {
     this.over = true;
+    track('run_end', { map: this.map.id, won, wave: this.wave, kills: this.kills, level: this.level, endless: this.endless });
     this.hud.showNext(false);
     if (won) this.sfx.win(); else this.sfx.lose();
     if (!won) this.fx.shake(0.8);
@@ -529,7 +539,10 @@ export class Game {
       this.hud.over('The last stand ends', `You held ${held} endless ${held === 1 ? 'wave' : 'waves'}, to wave ${this.wave}, and slew ${this.kills} foes. ${banked} gold added to the treasury.`, false);
       return;
     }
-    const banked = save.recordRun(this.map, won, this.wave, this.economy.gold);
+    const banked = save.recordRun({
+      map: this.map, cls: 'warden', won, wave: this.wave, gold: this.economy.gold, kills: this.kills, level: this.level, seconds: this.elapsed,
+      ...this.runStats, daily: null,
+    });
     let score = won
       ? `All ${this.map.waves} waves repelled. ${this.kills} foes slain in ${minutes}:${seconds}, at level ${this.level}.`
       : `You held until wave ${this.wave} and slew ${this.kills} foes, at level ${this.level}.`;
@@ -662,11 +675,13 @@ export class Game {
     this.fx.burst(site.x, 1.5, site.z, site.kind === 'camp' ? 0xd070ff : GOLD, 34, 11, 0.26);
     this.fx.ring(site.x, site.z, site.kind === 'camp' ? 0xff5a4a : GOLD, 5);
     if (site.kind === 'camp') {
+      this.runStats.camps++;
       this.economy.grant(12, 20 + w * 4);
       this.fx.shake(0.4);
       this.hud.banner(`Camp razed: +${20 + w * 4} gold, +12 wood`);
       return;
     }
+    this.runStats.chests++;
     const r = rand();
     if (r < 0.15) {
       const weapon = this.otherWeapon();
@@ -705,6 +720,7 @@ export class Game {
     const p = this.hero.position;
     this.hero.actor.flash();
     this.sfx.hurt();
+    if (settings.data.vibrate) navigator.vibrate?.(40);
     this.fx.shake(0.22);
     this.fx.number(p.x, 3.2, p.z, `-${Math.ceil(this.hurtBank)}`, '#ff6a50', 1.2);
     this.hurtBank = 0;
@@ -720,6 +736,7 @@ export class Game {
   /** Rewards for a kill: gold, the streak, a relic's heal and experience. */
   private killed(e: Enemy): void {
     this.kills++;
+    if (e.elite) this.runStats.elites++;
     const p = e.actor.root.position;
     const reward = (e.elite ? 3 : 1) * this.streakMul * this.upgrades.goldMul * (this.current.mod.gold ?? 1);
     this.economy.dropGold(p.x, p.z, roll(ENEMIES[e.kind].gold * reward));

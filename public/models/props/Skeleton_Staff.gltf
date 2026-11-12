@@ -1,0 +1,216 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 4557,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1879,
+      "max": [
+        9321,
+        32767,
+        11745
+      ],
+      "min": [
+        -9321,
+        -32767,
+        -11745
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 1879,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1879,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 9114,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1648,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 4557
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 9116,
+      "byteLength": 15032,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1648,
+          "byteLength": 9562,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1879
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 24148,
+      "byteLength": 7516,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 11212,
+          "byteLength": 5844,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 1879
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 31664,
+      "byteLength": 15032,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 17056,
+          "byteLength": 10901,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1879
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "skeleton_texture",
+      "mimeType": "image/png",
+      "uri": "skeleton_texture.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Skeleton_Staff.bin",
+      "byteLength": 27960
+    },
+    {
+      "byteLength": 46696,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "skeleton",
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.5,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.004",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Skeleton_Staff",
+      "translation": [
+        -0.1588648110628128,
+        0.20460832118988037,
+        0.008223429322242737
+      ],
+      "scale": [
+        1.0508800745010376,
+        1.0508800745010376,
+        1.0508800745010376
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}
