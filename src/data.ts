@@ -1,3 +1,4 @@
+import { pick, rand, shuffle } from './rng';
 export type EnemyKind = 'Minion' | 'Runner' | 'Warrior' | 'Hexer' | 'Boss';
 
 export interface RangedAttack { range: number; interval: number; damage: number }
@@ -39,7 +40,7 @@ export function waveComposition(wave: number, rules: WaveRules, mod: WaveMod = C
     ...Array<EnemyKind>(minions).fill('Minion'), ...Array<EnemyKind>(runners).fill('Runner'),
     ...Array<EnemyKind>(warriors).fill('Warrior'), ...Array<EnemyKind>(hexers).fill('Hexer'),
   ];
-  list.sort(() => Math.random() - 0.5);
+  shuffle(list);
   if (isBossWave(wave, rules)) list.push('Boss');
   return list;
 }
@@ -161,9 +162,8 @@ export const STAKES_HORDE = 1.3;
 export interface WaveOption { mod: WaveMod; horde: number; gold: number; boon: boolean }
 
 export function waveOptions(wave: number): [WaveOption, WaveOption] {
-  const pick = <T>(list: T[]) => list[Math.floor(Math.random() * list.length)];
   const steady: WaveOption = { mod: wave <= 1 ? CALM : pick(MILD_MODS), horde: 1, gold: 6 + wave * 2, boon: false };
-  const boon = Math.random() < 0.5;
+  const boon = rand() < 0.5;
   const stakes: WaveOption = { mod: pick(HARD_MODS), horde: STAKES_HORDE, gold: boon ? 0 : 30 + wave * 6, boon };
   return [steady, stakes];
 }
@@ -222,3 +222,9 @@ export const KEEP_TIERS: Array<{ wood: number; gold: number; title: string; text
   { wood: 25, gold: 25, title: 'Raise the Keep', text: 'Beacons, cottages, a ranger' },
   { wood: 45, gold: 60, title: 'Raise the Keep', text: 'Gold mine, tier III towers' },
 ];
+
+/** Share of unspent gold paid as interest after a wave, up to a cap that grows with the wave. */
+export const INTEREST = 0.1;
+export const interestCap = (wave: number): number => 5 + wave * 2;
+/** Gold per second skipped when calling a wave early. */
+export const callBonus = (seconds: number, wave: number): number => Math.round(seconds * (0.8 + wave * 0.1));

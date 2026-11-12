@@ -308,3 +308,18 @@ export function buildWeather(scene: THREE.Scene, kind: MapLook['weather']): (dt:
     geometry.getAttribute('position').needsUpdate = true;
   };
 }
+
+/** Pushes a walker out of every round obstacle it overlaps. */
+export function pushOutOfObstacles(p: THREE.Vector3, radius: number, obstacles: readonly Obstacle[]): void {
+  for (const o of obstacles) {
+    const dx = p.x - o.x;
+    const dz = p.z - o.z;
+    const min = o.r + radius;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < min * min && d2 > 1e-6) {
+      const d = Math.sqrt(d2);
+      p.x = o.x + (dx / d) * min;
+      p.z = o.z + (dz / d) * min;
+    }
+  }
+}

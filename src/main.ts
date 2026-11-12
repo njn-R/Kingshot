@@ -4,7 +4,9 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Assets } from './assets';
-import { Game, type Input } from './game';
+import { Game } from './game';
+import type { Input } from './hero';
+import { Hud } from './hud';
 import { createMenu } from './menu';
 import { MAPS, mapModels, type MapDef } from './maps';
 import { save } from './save';
@@ -64,7 +66,7 @@ function createInput(): () => Input {
 async function start(): Promise<void> {
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.95;
   document.body.prepend(renderer.domElement);
@@ -74,11 +76,7 @@ async function start(): Promise<void> {
   await assets.load();
 
   const sfx = new Sfx();
-  const ui = {
-    title: el('title'), xp: el('xp'), level: el('level'), boss: el('boss'), bossFill: el('bossFill'), cards: el('cards'), hp: el('hp'), wood: el('wood'), gold: el('gold'), wave: el('wave'), kills: el('kills'), banner: el('banner'), over: el('over'), score: el('score'), hurt: el('hurt'),
-    bossName: el('bossName'), abilities: [el('volley'), el('bash')] as [HTMLElement, HTMLElement], arrows: el('arrows'),
-    next: el('next'), nextTitle: el('nextTitle'), nextOpts: el('nextOpts'), callNow: el('callNow'), streak: el('streak'), endless: el('endless'),
-  };
+  const hud = new Hud();
   let game: Game;
   let tier = 0; // 0 is full quality; slow devices step down to 2.
   const renderPass = new RenderPass(new THREE.Scene(), camera);
@@ -92,7 +90,7 @@ async function start(): Promise<void> {
     await new Promise((r) => setTimeout(r, 30)); // lets the loading text paint first
     await assets.ensure(mapModels(map));
     game?.dispose();
-    game = new Game(assets, camera, ui, sfx, map);
+    game = new Game(assets, camera, hud, sfx, map);
     renderPass.scene = game.scene;
     game.setShadows(tier < 2);
     if (import.meta.env.DEV) Object.assign(window, { game });
@@ -121,19 +119,20 @@ async function start(): Promise<void> {
   await loadMap(MAPS.find((m) => m.id === save.data.lastMap) ?? MAPS[0]);
   document.body.dataset.screen = 'menu';
   const refreshMenu = createMenu(sfx, (map) => { void play(map); });
-  el('again').addEventListener('click', () => game.start());
-  el('endless').addEventListener('click', () => game.pressOn());
-  el('callNow').addEventListener('click', () => game.callWave());
-  el('pause').addEventListener('click', () => setPaused(true));
-  el('volley').addEventListener('click', () => game.useAbility(0));
-  el('bash').addEventListener('click', () => game.useAbility(1));
-  el('resume').addEventListener('click', () => setPaused(false));
-  el('abandon').addEventListener('click', showMenu);
+  const b = hud.buttons;
+  b.again.addEventListener('click', () => game.start());
+  b.endless.addEventListener('click', () => game.pressOn());
+  b.callNow.addEventListener('click', () => game.callWave());
+  b.pause.addEventListener('click', () => setPaused(true));
+  b.abilities[0].addEventListener('click', () => game.useAbility(0));
+  b.abilities[1].addEventListener('click', () => game.useAbility(1));
+  b.resume.addEventListener('click', () => setPaused(false));
+  b.abandon.addEventListener('click', showMenu);
   addEventListener('keydown', (e) => { if ((e.code === 'Escape' || e.code === 'KeyP') && !e.repeat) setPaused(!game.paused); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
-  el('toMenu').addEventListener('click', showMenu);
+  b.toMenu.addEventListener('click', showMenu);
 
-  const mute = el('mute');
+  const mute = b.mute;
   const showMute = () => {
     mute.textContent = sfx.muted ? 'Sound off' : 'Sound on';
     mute.setAttribute('aria-pressed', String(sfx.muted));

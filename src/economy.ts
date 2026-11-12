@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Assets } from './assets';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Actor } from './actor';
+import { CHAR_SCALE } from './hero';
 import { CAMP, GATE_SIDES, insideCamp, type Obstacle } from './world';
 
 /** Choppable trees in the meadow outside each wall, as [distance from centre, offset along the wall]. */
@@ -343,7 +344,8 @@ export class Economy {
 
   private createStack(): void {
     const holder = new THREE.Group();
-    holder.position.set(0, 1.25, -0.72);
+    holder.position.set(0, 1.25 * CHAR_SCALE, -0.72 * CHAR_SCALE);
+    holder.scale.setScalar(CHAR_SCALE);
     this.hero.add(holder);
     for (let i = 0; i < MAX_STACK; i++) {
       const log = this.logModel.clone();
