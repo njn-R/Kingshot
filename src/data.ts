@@ -1,25 +1,60 @@
-import { pick, rand, shuffle } from './rng';
-export type EnemyKind = 'Minion' | 'Runner' | 'Warrior' | 'Hexer' | 'Boss';
+import { draw } from './rng';
+
+export type EnemyKind = 'Minion' | 'Runner' | 'Warrior' | 'Hexer' | 'Shieldbearer' | 'Archer' | 'Sapper' | 'Boss';
 
 export interface RangedAttack { range: number; interval: number; damage: number }
+
+export interface Gear { right?: string; left?: string }
 
 export interface EnemyStats {
   model: string; walk: string; scale: number; hp: number; speed: number; dps: number;
   hitRadius: number; xp: number; gold: number; cap: number; ranged?: RangedAttack;
+  /** Models held in the hands. */
+  gear?: Gear;
+  /** Bolts from the front glance off. */
+  shield?: boolean;
+  /** Damage multiplier against barricades and buildings; sappers always go for them. */
+  siege?: number;
+  /** Ranged attacks fly as bone arrows rather than orbs. */
+  arrows?: boolean;
 }
 
 export const ENEMIES: Record<EnemyKind, EnemyStats> = {
   Minion: { model: 'Skeleton_Minion', walk: 'Walking_A', scale: 1.1, hp: 4, speed: 4.4, dps: 7, hitRadius: 1.1, xp: 1, gold: 1, cap: 90 },
   Runner: { model: 'Skeleton_Rogue', walk: 'Running_A', scale: 1.05, hp: 3, speed: 7.2, dps: 6, hitRadius: 1, xp: 1, gold: 1, cap: 30 },
-  Warrior: { model: 'Skeleton_Warrior', walk: 'Walking_A', scale: 1.3, hp: 12, speed: 3.2, dps: 16, hitRadius: 1.3, xp: 3, gold: 3, cap: 30 },
+  Warrior: {
+    model: 'Skeleton_Warrior', walk: 'Walking_A', scale: 1.3, hp: 12, speed: 3.2, dps: 16, hitRadius: 1.3, xp: 3, gold: 3, cap: 30,
+    gear: { right: 'Skeleton_Blade', left: 'Skeleton_Shield_Small_A' },
+  },
   Hexer: {
     model: 'Skeleton_Mage', walk: 'Walking_A', scale: 1.2, hp: 9, speed: 3.2, dps: 5, hitRadius: 1.2, xp: 4, gold: 4, cap: 14,
-    ranged: { range: 12, interval: 2.6, damage: 9 },
+    ranged: { range: 12, interval: 2.6, damage: 9 }, gear: { right: 'Skeleton_Staff' },
+  },
+  Shieldbearer: {
+    model: 'Skeleton_Warrior', walk: 'Walking_A', scale: 1.25, hp: 10, speed: 3, dps: 10, hitRadius: 1.3, xp: 3, gold: 3, cap: 20,
+    gear: { right: 'Skeleton_Blade', left: 'Skeleton_Shield_Large_A' }, shield: true,
+  },
+  Archer: {
+    model: 'Skeleton_Minion', walk: 'Walking_A', scale: 1.1, hp: 5, speed: 3.6, dps: 4, hitRadius: 1.1, xp: 2, gold: 2, cap: 16,
+    gear: { right: 'Skeleton_Crossbow' }, ranged: { range: 14, interval: 2.2, damage: 6 }, arrows: true,
+  },
+  Sapper: {
+    model: 'Skeleton_Minion', walk: 'Running_A', scale: 1.15, hp: 6, speed: 5.2, dps: 7, hitRadius: 1.1, xp: 2, gold: 2, cap: 16,
+    gear: { right: 'Skeleton_Axe' }, siege: 3,
   },
   Boss: { model: 'Skeleton_Warrior', walk: 'Walking_A', scale: 3, hp: 90, speed: 3.4, dps: 30, hitRadius: 2.4, xp: 15, gold: 15, cap: 1 },
 };
 
-export interface WaveRules { waves: number; hpScale: number; hordeScale: number; runnerRate: number; hexerRate: number }
+/** Who may appear in a wave, in the order a short description lists them. */
+export const ENEMY_NOTES: Record<Exclude<EnemyKind, 'Boss'>, string> = {
+  Minion: 'The rank and file', Runner: 'Fast and frail', Warrior: 'Slow and hard-hitting', Hexer: 'Casts from range',
+  Shieldbearer: 'Blocks bolts from the front; flank it or burn it', Archer: 'Shoots bone arrows from afar', Sapper: 'Rushes barricades and buildings',
+};
+
+export interface WaveRules {
+  waves: number; hpScale: number; hordeScale: number; runnerRate: number; hexerRate: number;
+  shieldRate?: number; archerRate?: number; sapperRate?: number;
+}
 
 /** A map's extra difficulty arrives gradually, so its opening waves stay fair. */
 const ramp = (scale: number, wave: number): number => 1 + (scale - 1) * Math.min(1, wave / 8);
@@ -31,7 +66,10 @@ export function waveComposition(wave: number, rules: WaveRules, mod: WaveMod = C
   const scale = ramp(rules.hordeScale, wave) * horde * (mod.horde ?? 1);
   let runners = wave >= 3 ? Math.floor(wave * 0.5 * rules.runnerRate) : 0;
   const hexers = (wave >= 6 ? Math.max(1, Math.floor((wave - 4) * 0.4 * rules.hexerRate)) : 0) + (wave >= 3 ? mod.hexers ?? 0 : 0);
-  let minions = Math.max(0, Math.round((6 + wave * 3) * scale) - runners);
+  const shields = wave >= 5 ? Math.floor((wave - 3) * 0.35 * (rules.shieldRate ?? 1) * (mod.shields ?? 1)) : 0;
+  const archers = wave >= 7 ? Math.floor((wave - 5) * 0.3 * (rules.archerRate ?? 1)) : 0;
+  const sappers = wave >= 4 ? Math.floor((wave - 2) * 0.25 * (rules.sapperRate ?? 1) * (mod.sappers ?? 1)) : 0;
+  let minions = Math.max(0, Math.round((6 + wave * 3) * scale) - runners - Math.floor((shields + archers + sappers) / 2));
   const swarm = Math.round(minions * (mod.runners ?? 0));
   minions -= swarm;
   runners += swarm;
@@ -39,8 +77,9 @@ export function waveComposition(wave: number, rules: WaveRules, mod: WaveMod = C
   const list: EnemyKind[] = [
     ...Array<EnemyKind>(minions).fill('Minion'), ...Array<EnemyKind>(runners).fill('Runner'),
     ...Array<EnemyKind>(warriors).fill('Warrior'), ...Array<EnemyKind>(hexers).fill('Hexer'),
+    ...Array<EnemyKind>(shields).fill('Shieldbearer'), ...Array<EnemyKind>(archers).fill('Archer'), ...Array<EnemyKind>(sappers).fill('Sapper'),
   ];
-  shuffle(list);
+  draw.shuffle(list);
   if (isBossWave(wave, rules)) list.push('Boss');
   return list;
 }
@@ -93,12 +132,19 @@ export interface Upgrades {
   startWood: number; startGold: number;
   /** Run-wide changes from relics and the current wave. */
   towerDamage: number; towerRange: number; armor: number; cooldown: number; thornWalls: number; goldMul: number;
+  /** Bolt rules from cards and weapons: extra targets per hit, burst radius, chill strength, damage multiplier. */
+  bounce: number; explode: number; frost: number; damageMul: number;
+  /** Towers and walls: damage multiplier, lightning every nth tower bolt, barricade shots per second, barricade health. */
+  towerDamageMul: number; towerChain: number; gateShots: number; gateHp: number;
+  /** Allies' fire rate multiplier and extra rest seconds between waves. */
+  allyRate: number; restBonus: number;
 }
 
 export const baseUpgrades = (): Upgrades => ({
   damage: 2, fireInterval: 0.38, range: 17, arrows: 1, pierce: 0,
   speed: 11, chopInterval: 0.28, magnet: 6, towerInterval: 0.7, maxHp: 100, regen: 0, startWood: 0, startGold: 0,
   towerDamage: 0, towerRange: 1, armor: 1, cooldown: 1, thornWalls: 0, goldMul: 1,
+  bounce: 0, explode: 0, frost: 0, damageMul: 1, towerDamageMul: 1, towerChain: 0, gateShots: 0, gateHp: 1, allyRate: 1, restBonus: 0,
 });
 
 export interface MetaUpgrade { id: string; title: string; text: string; max: number; baseCost: number; apply(u: Upgrades, level: number): void }
@@ -129,12 +175,35 @@ export const CARDS: Card[] = [
   { id: 'drill', title: 'Ballista Drills', text: 'Towers fire 20% faster', max: 4, apply: (u) => { u.towerInterval *= 0.8; } },
   { id: 'vitality', title: 'Vitality', text: '+25 max health and heal 25', max: 5, apply: (u) => { u.maxHp += 25; } },
   { id: 'medic', title: 'Field Medic', text: 'Recover 1.5 health per second', max: 4, apply: (u) => { u.regen += 1.5; } },
+  // Rule changers: these make a build rather than a bigger number.
+  { id: 'ricochet', title: 'Ricochet', text: 'Bolts leap to one more foe nearby after a hit', max: 2, apply: (u) => { u.bounce += 1; } },
+  { id: 'powder', title: 'Powder Bolts', text: 'Bolts burst on impact, hurting foes around the mark', max: 2, apply: (u) => { u.explode += 1.6; } },
+  { id: 'frost', title: 'Frost Bolts', text: 'Bolts chill foes, slowing them for a moment', max: 2, apply: (u) => { u.frost = Math.min(0.6, u.frost + 0.35); } },
+  { id: 'stormtowers', title: 'Storm Ballistae', text: 'Every fourth tower bolt arcs lightning to nearby foes', max: 1, apply: (u) => { u.towerChain = 4; } },
+  { id: 'gatearchers', title: 'Gate Archers', text: 'Every barricade shoots bolts at foes approaching it', max: 2, apply: (u) => { u.gateShots += 0.8; } },
+  { id: 'masonry', title: 'Masonry', text: 'Barricades hold 50% more', max: 2, apply: (u) => { u.gateHp *= 1.5; } },
+];
+
+/** Rare, once per run, and a real trade. */
+export const KEYSTONES: Card[] = [
+  { id: 'glass', title: 'Glass Cannon', text: 'Keystone: bolts hit twice as hard, but 40% less health', max: 1, apply: (u) => { u.damageMul *= 2; u.maxHp = Math.round(u.maxHp * 0.6); } },
+  { id: 'hermit', title: 'Hermit Engineer', text: 'Keystone: towers hit 60% harder, you hit 30% softer', max: 1, apply: (u) => { u.towerDamageMul *= 1.6; u.damageMul *= 0.7; } },
+  { id: 'juggernaut', title: 'Juggernaut', text: 'Keystone: +80 health, but move 20% slower', max: 1, apply: (u) => { u.maxHp += 80; u.speed *= 0.8; } },
+];
+
+/** Offered once every ordinary card is maxed, so endless keeps climbing. */
+export const ENDLESS_CARDS: Card[] = [
+  { id: 'sharper', title: 'Sharper Bolts', text: '+1 bolt damage', max: Infinity, apply: (u) => { u.damage += 1; } },
+  { id: 'secondwind', title: 'Second Wind', text: 'Heal half your health and +10 max health', max: Infinity, apply: (u) => { u.maxHp += 10; } },
+  { id: 'fleet', title: 'Fleet of Foot', text: 'Move 6% faster', max: Infinity, apply: (u) => { u.speed *= 1.06; } },
+  { id: 'haste', title: 'Haste', text: 'Shoot 6% faster', max: Infinity, apply: (u) => { u.fireInterval *= 0.94; } },
+  { id: 'ironworks', title: 'Ironworks', text: 'Towers hit 15% harder', max: Infinity, apply: (u) => { u.towerDamageMul *= 1.15; } },
 ];
 
 /** A twist on one wave, announced before it starts. Missing fields mean no change. */
 export interface WaveMod {
   id: string; title: string; text: string;
-  horde?: number; runners?: number; warriors?: number; hexers?: number;
+  horde?: number; runners?: number; warriors?: number; hexers?: number; shields?: number; sappers?: number;
   elites?: number; speed?: number; towerRange?: number; gold?: number;
 }
 
@@ -153,6 +222,8 @@ export const HARD_MODS: WaveMod[] = [
   { id: 'brutes', title: 'Brutes', text: 'Twice the warriors', warriors: 2 },
   { id: 'hexes', title: 'Hex Storm', text: 'Extra hexers', hexers: 3 },
   { id: 'haste', title: 'Haste', text: 'Foes move 20% faster', speed: 1.2 },
+  { id: 'shieldwall', title: 'Shield Wall', text: 'Twice the shieldbearers', shields: 2 },
+  { id: 'siege', title: 'Siege Crew', text: 'Twice the sappers', sappers: 2 },
 ];
 
 /** The harder choice also brings a bigger horde. */
@@ -162,15 +233,15 @@ export const STAKES_HORDE = 1.3;
 export interface WaveOption { mod: WaveMod; horde: number; gold: number; boon: boolean }
 
 export function waveOptions(wave: number): [WaveOption, WaveOption] {
-  const steady: WaveOption = { mod: wave <= 1 ? CALM : pick(MILD_MODS), horde: 1, gold: 6 + wave * 2, boon: false };
-  const boon = rand() < 0.5;
-  const stakes: WaveOption = { mod: pick(HARD_MODS), horde: STAKES_HORDE, gold: boon ? 0 : 30 + wave * 6, boon };
+  const steady: WaveOption = { mod: wave <= 1 ? CALM : draw.pick(MILD_MODS), horde: 1, gold: 6 + wave * 2, boon: false };
+  const boon = draw.next() < 0.5;
+  const stakes: WaveOption = { mod: draw.pick(HARD_MODS), horde: STAKES_HORDE, gold: boon ? 0 : 30 + wave * 6, boon };
   return [steady, stakes];
 }
 
-export type RelicId = 'storm' | 'embers' | 'vampire' | 'idol' | 'ward' | 'siege' | 'aegis' | 'thorns' | 'echo';
+export type RelicId = 'storm' | 'embers' | 'vampire' | 'idol' | 'ward' | 'siege' | 'aegis' | 'thorns' | 'echo' | 'phoenix' | 'hourglass' | 'banner' | 'lodestone';
 
-export interface Relic { id: RelicId; title: string; text: string; apply?(u: Upgrades): void }
+export interface Relic { id: RelicId; title: string; text: string; apply?(u: Upgrades): void; /** Achievement that must be held before it is offered. */ unlock?: string }
 
 /** Run-long powers; one is picked after each boss falls. */
 export const RELICS: Relic[] = [
@@ -182,10 +253,14 @@ export const RELICS: Relic[] = [
   { id: 'siege', title: 'Siege Masters', text: 'Towers hit harder and fire 15% faster', apply: (u) => { u.towerDamage += 1; u.towerInterval *= 0.85; } },
   { id: 'aegis', title: "Warden's Aegis", text: 'Take 25% less damage', apply: (u) => { u.armor *= 0.75; } },
   { id: 'thorns', title: 'Thorned Walls', text: 'Every barricade hurts its attackers', apply: (u) => { u.thornWalls = 1; } },
-  { id: 'echo', title: 'Echoing Horn', text: 'Volley and Bash recharge twice as fast', apply: (u) => { u.cooldown *= 0.5; } },
+  { id: 'echo', title: 'Echoing Horn', text: 'Abilities recharge twice as fast', apply: (u) => { u.cooldown *= 0.5; } },
+  { id: 'phoenix', title: 'Phoenix Feather', text: 'Once a run, a killing blow only costs half your health', unlock: 'endless-10' },
+  { id: 'hourglass', title: 'Hourglass', text: 'Rests last 8 seconds longer and calling early pays half again', apply: (u) => { u.restBonus += 8; }, unlock: 'daily-3' },
+  { id: 'banner', title: 'Banner of Rally', text: 'Allies shoot 50% faster', apply: (u) => { u.allyRate *= 1.5; }, unlock: 'bosses-10' },
+  { id: 'lodestone', title: 'Lodestone', text: 'Gold flies to you from anywhere', apply: (u) => { u.magnet = 999; }, unlock: 'gold-2000' },
 ];
 
-export type WeaponId = 'crossbow' | 'longbow' | 'arbalest' | 'greataxe';
+export type WeaponId = 'crossbow' | 'longbow' | 'arbalest' | 'greataxe' | 'staff' | 'daggers' | 'longsword';
 
 export interface Weapon {
   id: WeaponId; title: string; text: string; model: string;
@@ -193,6 +268,8 @@ export interface Weapon {
   interval: number; damage: number; range: number; pierce: number;
   /** Melee weapons hit every foe within `reach` instead of shooting. */
   reach?: number;
+  /** Bolts burst on impact with this radius. */
+  blast?: number;
 }
 
 export const WEAPONS: Record<WeaponId, Weapon> = {
@@ -200,6 +277,9 @@ export const WEAPONS: Record<WeaponId, Weapon> = {
   longbow: { id: 'longbow', title: 'Longbow', text: 'Fast, far-reaching, lighter shots', model: 'bow_withString', interval: 0.6, damage: 0.68, range: 6, pierce: 0 },
   arbalest: { id: 'arbalest', title: 'Arbalest', text: 'Slow, heavy bolts that pierce lines', model: 'crossbow_2handed', interval: 1.7, damage: 2.3, range: 2, pierce: 2 },
   greataxe: { id: 'greataxe', title: 'Greataxe', text: 'Cleaves every foe around you', model: 'axe_2handed', interval: 1.8, damage: 2.6, range: 0, pierce: 0, reach: 4.8 },
+  staff: { id: 'staff', title: 'Staff', text: 'Slow bolts that burst on impact', model: 'staff', interval: 1.35, damage: 1.5, range: 1, pierce: 0, blast: 2.2 },
+  daggers: { id: 'daggers', title: 'Throwing Knives', text: 'Quick knives that pass through one foe', model: 'dagger', interval: 0.5, damage: 0.55, range: -4, pierce: 1 },
+  longsword: { id: 'longsword', title: 'Longsword', text: 'Quick swings at everything close', model: 'sword_1handed', interval: 0.9, damage: 1.3, range: 0, pierce: 0, reach: 3.4 },
 };
 
 export type WareId = 'draught' | 'lumber' | 'mason' | 'charm' | 'sellsword' | 'weapon';

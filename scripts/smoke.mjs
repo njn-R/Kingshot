@@ -1,4 +1,6 @@
-// Drives the game in headless Chromium: loads the menu, starts a run, walks, chops, and reports console errors.
+// Drives the game in headless Chromium against a running dev server and reports console errors.
+// Covers the menu, every class and its abilities, new enemy types, a boss phase change, the river map,
+// the daily, quitting and resuming a saved run, and the records panel.
 // Usage: node scripts/smoke.mjs [url] (default http://localhost:5173). Screenshots go to scratch/smoke-*.png.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -30,56 +32,114 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });
+page.on('dialog', (d) => d.accept());
 
-const shot = async (name) => { await page.screenshot({ path: path.join(outDir, `smoke-${name}.png`) }); console.log('screenshot', name); };
-const state = async () => page.evaluate(() => {
-  const g = window.game;
-  const d = g?.debug ?? {};
-  return { screen: document.body.dataset.screen, load: getComputedStyle(document.getElementById('load')).display, ...d };
-});
+const shot = async (name) => { await page.screenshot({ path: path.join(outDir, `smoke-${name}.png`) }); console.log('  screenshot', name); };
+const state = () => page.evaluate(() => ({ screen: document.body.dataset.screen, ...(window.game?.debug ?? {}) }));
+const wait = (ms) => page.waitForTimeout(ms);
+const summary = (s) => `cls=${s.cls} wave=${s.wave} hp=${s.hp}/${s.maxHp} kills=${s.kills} active=${s.active} boss=${s.boss} phase=${s.phase} daily=${s.daily} weapon=${s.weapon}`;
+let failures = 0;
+const check = (ok, what) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${what}`); if (!ok) failures++; };
 
 console.log('open', url);
 await page.goto(url, { waitUntil: 'load', timeout: 60000 });
-await page.waitForFunction(() => getComputedStyle(document.getElementById('load')).display === 'none', null, { timeout: 90000 });
-await page.waitForTimeout(1500);
-console.log('menu:', JSON.stringify(await state()));
+await page.waitForFunction(() => getComputedStyle(document.getElementById('load')).display === 'none', null, { timeout: 120000 });
+await wait(1200);
 await shot('menu');
+const menu = await page.evaluate(() => ({
+  classes: document.querySelectorAll('#classes .cls').length,
+  maps: document.querySelectorAll('#maps .map').length,
+  daily: document.getElementById('dailyText').textContent,
+}));
+check(menu.classes === 5 && menu.maps === 4 && menu.daily.length > 5, `menu shows 5 classes, 4 maps and a daily (${menu.daily})`);
 
-// Start the first map, wait for the world, then walk around and let a wave come.
-await page.click('#maps button');
-await page.waitForFunction(() => document.body.dataset.screen === 'play', null, { timeout: 30000 });
-await page.waitForTimeout(1200);
-await shot('start');
-const walk = async (key, ms) => { await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); };
-await walk('KeyW', 900);
-await walk('KeyA', 900);
-await walk('KeyS', 500);
-console.log('after walking:', JSON.stringify(await state()));
-await shot('walk');
-// Skip the tutorial and call the first wave early, then fight for a while.
-await page.evaluate(() => document.getElementById('tipSkip')?.click());
-await page.waitForTimeout(500);
-await page.evaluate(() => window.game.callWave());
-await page.waitForTimeout(6000);
-await page.keyboard.press('KeyQ');
-await page.waitForTimeout(4000);
-await page.keyboard.press('KeyE');
-await page.waitForTimeout(4000);
-console.log('mid-wave:', JSON.stringify(await state()));
-await shot('wave');
-// Pause and resume, then back to the menu and start again, to exercise reset paths.
-await page.keyboard.press('Escape');
-await page.waitForTimeout(300);
-await page.keyboard.press('Escape');
+// Every class: start Greenhollow, skip the tutorial, call a wave, use both abilities, fight a little.
+const classes = ['warden', 'ranger', 'barbarian', 'mage', 'rogue'];
+for (const [i, cls] of classes.entries()) {
+  await page.click(`#classes .cls:nth-child(${i + 1})`);
+  await page.click('#maps .map:nth-child(1)');
+  await page.waitForFunction(() => document.body.dataset.screen === 'play', null, { timeout: 60000 });
+  await wait(600);
+  await page.evaluate(() => document.getElementById('tipSkip')?.click());
+  await wait(300);
+  await page.evaluate(() => window.game.callWave());
+  await wait(3500);
+  await page.keyboard.press('KeyQ');
+  await wait(1200);
+  await page.keyboard.press('KeyE');
+  await wait(2500);
+  const s = await state();
+  check(s.cls === cls && s.wave >= 1, `${cls}: ${summary(s)}`);
+  if (cls === 'mage') await shot('mage');
+  await page.click('#pause');
+  await page.click('#abandon');
+  await wait(500);
+}
+
+// New foes and a boss phase change, via dev cheats.
+await page.click('#classes .cls:nth-child(1)');
+await page.click('#maps .map:nth-child(1)');
+await page.waitForFunction(() => document.body.dataset.screen === 'play', null, { timeout: 60000 });
+await page.evaluate(() => { document.getElementById('tipSkip')?.click(); const c = window.game.cheat; for (const k of ['Shieldbearer', 'Archer', 'Sapper']) c.spawn(k); c.boss(); });
+await wait(2500);
+await page.evaluate(() => window.game.cheat.hurtBoss(0.55));
+await wait(4000);
+let s = await state();
+check(s.boss && s.phase === 2, `boss enraged at half health: ${summary(s)}`);
+await shot('boss');
 await page.click('#pause');
 await page.click('#abandon');
-await page.waitForTimeout(800);
-console.log('menu again:', JSON.stringify(await state()));
-await page.click('#maps button:nth-child(2)');
-await page.waitForFunction(() => document.body.dataset.screen === 'play', null, { timeout: 60000 });
-await page.waitForTimeout(2500);
-console.log('second map:', JSON.stringify(await state()));
-await shot('second-map');
+await wait(500);
 
-console.log(errors.length ? `${errors.length} console problems:\n` + errors.slice(0, 15).join('\n') : 'no console errors or warnings');
+// Thornford: the river map.
+await page.click('#maps .map:nth-child(2)');
+await page.waitForFunction(() => document.body.dataset.screen === 'play', null, { timeout: 60000 });
+await page.evaluate(() => window.game.callWave());
+await wait(4000);
+s = await state();
+check(s.wave === 1, `Thornford runs: ${summary(s)}`);
+await shot('thornford');
+
+// Save between waves, quit, resume from the menu.
+await page.evaluate(() => { window.game.cheat.gold(80); window.game.cheat.save(); });
+await page.click('#pause');
+await page.click('#quitSave');
+await wait(800);
+const cont = await page.evaluate(() => getComputedStyle(document.getElementById('continueRun')).display !== 'none' && document.getElementById('continueRun').textContent);
+check(!!cont, `continue button offered: ${cont}`);
+await page.click('#continueRun');
+await page.waitForFunction(() => document.body.dataset.screen === 'play', null, { timeout: 60000 });
+await wait(1200);
+s = await state();
+check(s.wave >= 1 && s.gold >= 80, `resumed run: ${summary(s)} gold=${s.gold}`);
+await page.click('#pause');
+await page.click('#abandon');
+await wait(800);
+
+// The daily.
+await page.click('#dailyGo');
+await page.waitForFunction(() => document.body.dataset.screen === 'play', null, { timeout: 60000 });
+await wait(1500);
+s = await state();
+check(!!s.daily, `daily started: ${summary(s)}`);
+await shot('daily');
+await page.click('#pause');
+await page.click('#abandon');
+await wait(800);
+
+// Records and settings panels open and close.
+await page.click('#openRecords');
+await wait(400);
+await shot('records');
+const ach = await page.evaluate(() => document.querySelectorAll('#achList .ach').length);
+check(ach > 10, `records lists ${ach} achievements`);
+await page.click('#closeRecords');
+await page.click('#openSettings');
+await wait(300);
+await shot('settings');
+await page.click('#closeSettings');
+
+console.log(errors.length ? `${errors.length} console problems:\n` + [...new Set(errors)].slice(0, 20).join('\n') : 'no console errors or warnings');
+console.log(failures ? `${failures} checks failed` : 'all checks passed');
 await browser.close();
+process.exit(failures || errors.length ? 1 : 0);

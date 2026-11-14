@@ -4,11 +4,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Assets } from './assets';
-import { Game } from './game';
+import type { HeroClass } from './classes';
+import type { Daily } from './daily';
+import { Game, type RunSnapshot } from './game';
+import { track } from './analytics';
 import { Hud } from './hud';
 import { InputController } from './input';
 import { createMenu } from './menu';
 import { MAPS, mapModels, type MapDef } from './maps';
+import { classById } from './classes';
+import { dailyFor } from './daily';
 import { Music } from './music';
 import { save } from './save';
 import { settings, type Quality } from './settings';
@@ -73,32 +78,57 @@ async function start(): Promise<void> {
     el('paused').style.display = paused ? 'flex' : 'none';
   };
 
-  const showMenu = () => {
+  const showMenu = (abandon = false) => {
+    if (abandon) save.setRun(null);
     setPaused(false);
     document.body.dataset.screen = 'menu';
     game.toMenu();
     refreshMenu();
   };
-  const play = async (map: MapDef) => {
+  /** The last run's class and daily, for "Defend again". */
+  let lastRun: { cls: HeroClass; daily: Daily | null } = { cls: classById(save.data.lastClass), daily: null };
+  const play = async (map: MapDef, cls: HeroClass, daily: Daily | null = null, snapshot: RunSnapshot | null = null) => {
     await loadMap(map);
-    save.setLastMap(map.id);
+    if (!daily) save.setLastMap(map.id);
     document.body.dataset.screen = 'play';
-    game.start();
+    lastRun = { cls, daily };
+    game.start(cls, daily, snapshot);
   };
 
   await loadMap(MAPS.find((m) => m.id === save.data.lastMap) ?? MAPS[0]);
   document.body.dataset.screen = 'menu';
-  const refreshMenu = createMenu(sfx, (map) => { void play(map); });
+  const refreshMenu = createMenu(sfx, {
+    play: (map, cls) => { save.setRun(null); void play(map, cls); },
+    daily: (daily, cls) => { save.setRun(null); void play(daily.map, cls, daily); },
+    resume: (run) => {
+      const map = MAPS.find((m) => m.id === run.map)!;
+      const today = dailyFor();
+      const daily = run.daily === today.key ? today : run.daily ? { ...today, key: run.daily, seed: run.dailySeed, map } : null;
+      void play(map, classById(run.cls), daily, run);
+    },
+  });
   const b = hud.buttons;
-  b.again.addEventListener('click', () => game.start());
+  b.again.addEventListener('click', () => game.start(lastRun.cls, lastRun.daily));
   b.endless.addEventListener('click', () => game.pressOn());
   b.callNow.addEventListener('click', () => game.callWave());
   b.pause.addEventListener('click', () => setPaused(true));
   b.abilities[0].addEventListener('click', () => game.useAbility(0));
   b.abilities[1].addEventListener('click', () => game.useAbility(1));
   b.resume.addEventListener('click', () => setPaused(false));
-  b.abandon.addEventListener('click', showMenu);
-  b.toMenu.addEventListener('click', showMenu);
+  b.abandon.addEventListener('click', () => { if (confirm('Abandon this run? It cannot be resumed.')) { track('run_abandon', { map: game.map.id }); showMenu(true); } });
+  el('quitSave').addEventListener('click', () => showMenu());
+  b.toMenu.addEventListener('click', () => showMenu());
+  el('share').addEventListener('click', async () => {
+    const text = game.shareText;
+    const url = location.href.split('#')[0].split('?')[0];
+    track('share');
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Palisade', text, url }); return; }
+      await navigator.clipboard.writeText(`${text} ${url}`);
+      el('share').textContent = 'Copied!';
+      setTimeout(() => { el('share').textContent = 'Share'; }, 1500);
+    } catch { /* the player cancelled the share sheet */ }
+  });
   document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
 
   const mute = b.mute;
@@ -158,6 +188,7 @@ async function start(): Promise<void> {
     music.setVolume(settings.data.music);
     game.setShake(settings.data.shake);
     input.setJoystick(settings.data.joystick);
+    game.refreshAbilityLabels();
     applyQuality();
   };
   settings.onChange(applySettings);

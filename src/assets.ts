@@ -5,11 +5,11 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 const HEX = ['tree_single_A_cut', 'tree_single_B_cut', 'tree_single_A', 'tree_single_B', 'trees_A_large', 'trees_B_large', 'rock_single_A',
   'rock_single_C', 'barrel', 'crate_A_big', 'tent', 'resource_lumber', 'trees_A_cut', 'trees_B_cut', 'trees_A_medium', 'rock_single_D',
   'crate_open', 'sack', 'wheelbarrow', 'resource_stone', 'building_bridge_A'];
-const CASTLE = ['wall', 'tower-square', 'siege-ballista', 'siege-catapult', 'wall-narrow-gate', 'flag-pennant', 'siege-ram-demolished', 'siege-trebuchet-demolished', 'bridge-straight'];
+const CASTLE = ['wall', 'tower-square', 'siege-ballista', 'siege-catapult', 'wall-narrow-gate', 'flag-pennant', 'siege-ram-demolished', 'siege-trebuchet-demolished'];
 const CHARS = ['Knight', 'Barbarian', 'Rogue_Hooded', 'Rogue', 'Ranger', 'Mage', 'Skeleton_Minion', 'Skeleton_Rogue', 'Skeleton_Warrior', 'Skeleton_Mage'];
 const ANIMS = ['Rig_Medium_General', 'Rig_Medium_MovementBasic'];
 const PROPS = ['arrow_bow', 'crossbow_1handed', 'bow_withString', 'axe_2handed', 'crossbow_2handed', 'staff', 'dagger', 'sword_1handed', 'shield_round',
-  'smokebomb', 'Skeleton_Crossbow', 'Skeleton_Shield_Large_A', 'Skeleton_Axe', 'Skeleton_Staff', 'Skeleton_Arrow'];
+  'smokebomb', 'Skeleton_Crossbow', 'Skeleton_Shield_Large_A', 'Skeleton_Shield_Small_A', 'Skeleton_Blade', 'Skeleton_Axe', 'Skeleton_Staff', 'Skeleton_Arrow'];
 
 export type Progress = (done: number, total: number) => void;
 

@@ -7,6 +7,8 @@ export interface AllyContext {
   hero: THREE.Vector3;
   nearest(from: THREE.Vector3, range: number): THREE.Vector3 | null;
   shoot(from: THREE.Vector3, target: THREE.Vector3, damage: number, count: number): void;
+  /** Fire-rate multiplier from relics. */
+  rate?: number;
 }
 
 /** Shot interval, damage, bolts per shot and range at each level. */
@@ -71,7 +73,7 @@ export class Ally {
     if (target) {
       this.actor.root.rotation.y = Math.atan2(target.x - p.x, target.z - p.z);
       if (this.cooldown <= 0) {
-        this.cooldown = stats.interval;
+        this.cooldown = stats.interval / (ctx.rate ?? 1);
         ctx.shoot(p.clone().setY(1.6), target, stats.damage, stats.count);
       }
     }

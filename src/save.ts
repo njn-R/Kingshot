@@ -59,7 +59,12 @@ type Raw = Record<string, unknown>;
 
 /** Each step upgrades a save from version n to n + 1, keeping everything the player earned. */
 const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
-  1: (d) => ({ ...d, version: 2, lastClass: 'warden', stats: freshStats(), history: [], achievements: [], daily: {}, streak: { last: '', count: 0 }, run: null }),
+  // Maps already held keep their unlocks: the win achievements are granted from the old records.
+  1: (d) => {
+    const best = (typeof d.best === 'object' && d.best ? d.best : {}) as Record<string, MapRecord>;
+    const achievements = Object.entries(best).filter(([, r]) => r?.won).map(([id]) => `win-${id}`);
+    return { ...d, version: 2, lastClass: 'warden', stats: freshStats(), history: [], achievements, daily: {}, streak: { last: '', count: 0 }, run: null };
+  },
 };
 
 const num = (v: unknown, fallback = 0): number => (Number.isFinite(Number(v)) ? Number(v) : fallback);

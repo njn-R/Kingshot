@@ -72,6 +72,13 @@
   #logo{width:min(84vw,520px,70vh);height:auto;filter:drop-shadow(0 6px 10px #0009)}
   #tag{margin:-6px 0 0;font-size:clamp(15px,2.6vw,20px);text-align:center;text-shadow:0 2px 3px #000}
   #maps{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;width:100%}
+  #classes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;width:100%}
+  .cls{display:flex;flex-direction:column;gap:2px;width:min(100%,176px);padding:8px 10px;font-weight:normal;text-align:left;color:var(--cream);background:var(--grain),linear-gradient(#6a4528,#46291a)}
+  .cls strong{font-size:18px;color:var(--brass)}
+  .cls span{font-size:12px;line-height:1.25}
+  .cls em{font-size:12px;color:#e8cfa0}
+  .cls.chosen{border-color:var(--brass);box-shadow:0 0 12px #e6b84a99,0 3px 0 var(--wood-lo)}
+  @media (max-height:480px){#classes{gap:6px}.cls{width:auto;flex:1 1 0;padding:6px 8px}.cls span,.cls em{display:none}}
   .map{display:grid;grid-template-columns:auto 1fr;grid-template-areas:'s n' 's b' 's m';column-gap:12px;row-gap:2px;align-items:center;text-align:left;width:min(100%,300px);padding:12px;font-weight:normal;color:var(--cream);background:var(--grain),linear-gradient(#6a4528,#46291a)}
   .map i{grid-area:s;width:52px;height:64px;border-radius:5px;border:2px solid var(--brass)}
   .map strong{grid-area:n;font-size:21px;color:var(--brass)}
@@ -133,6 +140,29 @@
   @media (max-height:480px){#logo{flex:none;height:96px;width:auto}#tag{display:none}#menu{gap:10px;padding:8px 16px 18px}#maps{flex-wrap:nowrap;gap:8px}.map{flex:1 1 0;min-width:0;padding:8px}.map span{display:none}.map i{width:34px;height:42px}.map strong{font-size:18px}#keep{padding:6px 14px}#keep p{display:none}}
   @media (max-width:560px){#wave,#kills,#level{font-size:15px}#hud{gap:8px;padding:5px 8px}}
   #loadBox{display:flex;flex-direction:column;align-items:center;gap:12px}
+  #overNotes{margin:0;padding:0;list-style:none;color:var(--brass);font-size:17px;text-align:center}
+  #overNotes:empty{display:none}
+  .hint{margin:0;font-size:14px;color:#e8cfa0;text-align:center}
+  #continueRun{padding:8px 18px;font-size:16px}
+  #daily{display:flex;align-items:center;gap:12px;padding:8px 12px;width:min(100%,640px);box-sizing:border-box}
+  #daily>div{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+  #daily b{color:var(--brass);font-size:17px}
+  #daily span{font-size:14px}
+  #daily small{font-size:12px;color:#e8cfa0}
+  #dailyGo{flex:none;padding:8px 14px;font-size:15px}
+  #records{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:flex-start;gap:10px;background:#160d07ee;padding:18px 14px;box-sizing:border-box;z-index:3;overflow-y:auto;touch-action:pan-y}
+  #records h2{margin:0;font-size:clamp(24px,5vw,34px)}
+  #records h3{margin:6px 0 0;font-size:18px;color:var(--brass)}
+  #statList{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;width:min(100%,660px)}
+  #statList div{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;font-size:14px;background:#2b1a10;border:1px solid var(--wood-lo);border-radius:5px}
+  #statList b{color:var(--brass)}
+  #achList{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:6px;width:min(100%,660px)}
+  .ach{display:flex;flex-direction:column;padding:6px 10px;font-size:13px;background:#2b1a10;border:1px solid var(--wood-lo);border-radius:5px;opacity:.65}
+  .ach.got{opacity:1;border-color:var(--brass-lo)}
+  .ach strong{font-size:15px;color:var(--brass)}
+  #historyList{margin:0;padding-left:18px;width:min(100%,640px);font-size:13px;line-height:1.5}
+  #saveText{width:min(100%,640px);box-sizing:border-box;font:12px monospace;background:#1c100a;color:var(--cream);border:2px solid var(--wood-lo);border-radius:5px;padding:6px}
+  @media (max-height:480px){#daily small,#daily span{display:none}#continueRun{padding:4px 12px}}
   #loadBar{width:min(70vw,320px);height:10px;background:#1c100a;border:2px solid var(--brass-lo);border-radius:5px;overflow:hidden}
   #loadBar i{display:block;height:100%;width:0;background:linear-gradient(#f1cf85,#c8953f);transition:width .15s}
   #settings{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#160d07e6;padding:14px;box-sizing:border-box;z-index:4;overflow-y:auto}
@@ -157,12 +187,12 @@
   <button id="pause" type="button">Pause</button>
   <div id="abilities"><button id="volley" class="ability ready" type="button" aria-label="Volley, key Q">Volley<kbd>Q</kbd></button><button id="bash" class="ability ready" type="button" aria-label="Shield bash, key E">Bash<kbd>E</kbd></button></div>
   <div id="tip" class="plank"><span id="tipText"></span><button id="tipSkip" class="quiet" type="button">Skip</button></div>
-  <div id="paused"><h1>Paused</h1><div class="actions"><button id="resume" type="button">Resume</button><button id="pauseSettings" class="quiet" type="button">Settings</button><button id="abandon" class="quiet" type="button">Abandon run</button></div></div>
+  <div id="paused"><h1>Paused</h1><p class="hint">Quitting keeps your run from the last cleared wave.</p><div class="actions"><button id="resume" type="button">Resume</button><button id="pauseSettings" class="quiet" type="button">Settings</button><button id="quitSave" class="quiet" type="button">Quit to menu</button><button id="abandon" class="quiet" type="button">Abandon run</button></div></div>
   <div id="boss"><span id="bossName"></span><div id="bossFill"></div></div>
   <div id="banner"></div>
   <div id="cards"></div>
   <div id="stick"><div id="nub"></div></div>
-  <div id="over"><h1 id="title"></h1><p id="score"></p><div class="actions"><button id="endless" type="button">Press on</button><button id="again" type="button">Defend again</button><button id="toMenu" class="quiet" type="button">Choose a map</button></div></div>
+  <div id="over"><h1 id="title"></h1><p id="score"></p><ul id="overNotes"></ul><div class="actions"><button id="share" class="quiet" type="button">Share</button><button id="endless" type="button">Press on</button><button id="again" type="button">Defend again</button><button id="toMenu" class="quiet" type="button">Choose a map</button></div></div>
 
   <div id="menu">
     <svg id="logo" viewBox="0 0 520 190" role="img" aria-label="Palisade">
@@ -181,8 +211,11 @@
       <text x="260" y="170" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-weight="bold" font-size="82" letter-spacing="7" fill="url(#letters)" stroke="#2b1a10" stroke-width="7" paint-order="stroke" stroke-linejoin="round">PALISADE</text>
     </svg>
     <p id="tag">Chop, build and hold the walls against the bone horde.</p>
+    <button id="continueRun" type="button"></button>
+    <div id="daily" class="plank"><div><b>Daily challenge</b><span id="dailyText"></span><small id="dailyBest"></small></div><button id="dailyGo" type="button">Play the daily</button></div>
+    <div id="classes"></div>
     <div id="maps"></div>
-    <div id="menuFoot"><span>Treasury <b id="treasury">0</b></span><button id="openKeep" class="quiet" type="button">The Keep</button><button id="openSettings" class="quiet" type="button">Settings</button></div>
+    <div id="menuFoot"><span>Treasury <b id="treasury">0</b></span><button id="openKeep" class="quiet" type="button">The Keep</button><button id="openRecords" class="quiet" type="button">Records</button><button id="openSettings" class="quiet" type="button">Settings</button></div>
     <p id="credits">Art by KayKit and Kenney (CC0)</p>
   </div>
 
@@ -191,6 +224,19 @@
     <p>Treasury: <span id="keepGold">0</span> gold</p>
     <div id="keepList"></div>
     <button id="closeKeep" type="button">Back</button>
+  </div>
+
+  <div id="records">
+    <h2>Records</h2>
+    <div id="statList"></div>
+    <h3>Achievements</h3>
+    <div id="achList"></div>
+    <h3>Recent runs</h3>
+    <ul id="historyList"></ul>
+    <h3>Move your progress</h3>
+    <textarea id="saveText" rows="3" spellcheck="false" placeholder="Export copies your save here; paste one here to import it."></textarea>
+    <p id="saveStatus" class="hint"></p>
+    <div class="actions"><button id="exportSave" class="quiet" type="button">Export</button><button id="importSave" class="quiet" type="button">Import</button><button id="closeRecords" type="button">Back</button></div>
   </div>
 
   <div id="settings">

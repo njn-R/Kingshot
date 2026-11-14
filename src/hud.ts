@@ -249,9 +249,11 @@ export class Hud {
   }
 
   /** The end-of-run screen. */
-  over(title: string, score: string, endlessOffered: boolean): void {
+  over(title: string, score: string, endlessOffered: boolean, notes: readonly string[] = []): void {
     el('title').textContent = title;
     el('score').textContent = score;
+    const list = el('overNotes');
+    list.replaceChildren(...notes.map((n) => { const li = document.createElement('li'); li.textContent = n; return li; }));
     el('endless').style.display = endlessOffered ? '' : 'none';
     el('over').style.display = 'flex';
   }

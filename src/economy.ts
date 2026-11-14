@@ -60,8 +60,8 @@ interface Tree { obj: THREE.Object3D; stump: THREE.Object3D; x: number; z: numbe
 interface Coin { mesh: THREE.Mesh; vy: number; vx: number; vz: number; value: number }
 interface Flyer { obj: THREE.Object3D; from: THREE.Vector3; to: () => THREE.Vector3; t: number; dur: number }
 interface Pop { obj: THREE.Object3D; t: number; scale: number }
-interface Tower { kind: TowerKind; head: THREE.Object3D; top: THREE.Vector3; cooldown: number; root: THREE.Object3D; level: number; pulses: number; height: number }
-interface Gate { hp: number; maxHp: number; level: number; root: THREE.Object3D; bar: THREE.Mesh; door: THREE.Group; pad: Pad; nextFeel: number }
+interface Tower { pad: Pad; kind: TowerKind; head: THREE.Object3D; top: THREE.Vector3; cooldown: number; root: THREE.Object3D; level: number; pulses: number; shots: number; height: number }
+interface Gate { hp: number; maxHp: number; level: number; root: THREE.Object3D; bar: THREE.Mesh; door: THREE.Group; pad: Pad; nextFeel: number; cooldown: number }
 export interface Pad {
   kind: 'tower' | 'gate' | 'upgrade' | 'hut' | 'trap' | 'keep' | 'house' | 'mine' | 'offer'; tower: TowerKind;
   /** The Keep tier needed before this ring takes payment. */
@@ -81,11 +81,14 @@ export interface Pad {
   waitExit: boolean;
 }
 
+/** What has been built, for resuming a run between waves. Indexes are into the rings every run starts with. */
+export interface EconomySnapshot { wood: number; gold: number; tier: number; built: Array<[index: number, level: number]> }
+
 export type FeelEvent = 'chop' | 'fell' | 'coin' | 'pay' | 'build' | 'gateHit' | 'gateBreak' | 'workerChop' | 'deliver' | 'mined' | 'ruin' | 'bought';
 
 export interface CombatApi {
   nearest(from: THREE.Vector3, range: number): THREE.Vector3 | null;
-  fire(from: THREE.Vector3, target: THREE.Vector3, damage: number, count: number): void;
+  fire(from: THREE.Vector3, target: THREE.Vector3, damage: number, count: number, chain?: boolean): void;
   /** Hurls a boulder that lands on the target and damages everything within `radius`; `burn` leaves fire behind. */
   lob(from: THREE.Vector3, target: THREE.Vector3, radius: number, burn: boolean): void;
   /** Damages and slows every enemy in the circle; `freeze` also holds them still for a moment. */
@@ -602,7 +605,7 @@ export class Economy {
       const g = this.gates[pad.side];
       if (!g) return;
       g.level = pad.level;
-      g.maxHp = GATE_HP * GATE_HP_SCALE[g.level - 1];
+      g.maxHp = Math.round(GATE_HP * GATE_HP_SCALE[g.level - 1] * this.upgrades.gateHp);
       g.hp = g.maxHp;
       g.bar.scale.x = 1;
       this.styleGate(g);
@@ -902,7 +905,7 @@ export class Economy {
     root.add(body, head);
     this.scene.add(root);
     if (pad.tower === 'beacon') root.add(this.createBrazier(height));
-    const tower: Tower = { kind: pad.tower, head, root, cooldown: 0, top: new THREE.Vector3(pad.x, height + 0.8, pad.z), level: 1, pulses: 0, height };
+    const tower: Tower = { pad, kind: pad.tower, head, root, cooldown: 0, top: new THREE.Vector3(pad.x, height + 0.8, pad.z), level: 1, pulses: 0, shots: 0, height };
     this.towers.push(tower);
     const spot = this.upgradeSpot(pad.x, pad.z);
     const ring = this.createPad('upgrade', pad.tower, spot.x, spot.z, -1, '', 0, 0, UPGRADE_RADIUS);
@@ -959,7 +962,8 @@ export class Economy {
     root.add(hud);
 
     this.scene.add(root);
-    this.gates[pad.side] = { hp: GATE_HP, maxHp: GATE_HP, level: 1, root, bar, door, pad, nextFeel: 0 };
+    const hp = Math.round(GATE_HP * this.upgrades.gateHp);
+    this.gates[pad.side] = { hp, maxHp: hp, level: 1, root, bar, door, pad, nextFeel: 0, cooldown: 0 };
     this.pops.push({ obj: root, t: 0, scale: 1 });
     this.offerUpgrade(pad, 'barricade', 2);
   }
@@ -1084,6 +1088,22 @@ export class Economy {
     this.drawLabel(pad);
   }
 
+  /** With the Gate Archers boon, every barricade shoots at foes approaching it. */
+  private updateGates(dt: number): void {
+    if (this.upgrades.gateShots <= 0) return;
+    this.gates.forEach((g, side) => {
+      if (!g) return;
+      g.cooldown -= dt;
+      if (g.cooldown > 0) return;
+      const [nx, nz] = GATE_SIDES[side];
+      const from = new THREE.Vector3(nx * CAMP, 5.5, nz * CAMP);
+      const target = this.api.nearest(from, 12);
+      if (!target) return;
+      g.cooldown = 1 / this.upgrades.gateShots;
+      this.api.fire(from, target, 2 + this.upgrades.towerDamage, 1);
+    });
+  }
+
   private updateTowers(dt: number): void {
     const speed = this.upgrades.towerInterval / BASE_TOWER_INTERVAL;
     const bonus = this.upgrades.towerDamage;
@@ -1110,7 +1130,9 @@ export class Economy {
       if (t.cooldown > 0) continue;
       if (t.kind === 'ballista') {
         t.cooldown = spec.interval * speed * (lv >= 2 ? 0.8 : 1);
-        this.api.fire(t.top, target, spec.damage + (lv >= 2 ? 1 : 0), lv >= 3 ? 2 : 1);
+        t.shots++;
+        const chain = this.upgrades.towerChain > 0 && t.shots % this.upgrades.towerChain === 0;
+        this.api.fire(t.top, target, Math.round((spec.damage + (lv >= 2 ? 1 : 0)) * this.upgrades.towerDamageMul), lv >= 3 ? 2 : 1, chain);
       } else {
         t.cooldown = spec.interval * speed;
         this.api.lob(t.top, target, lv >= 2 ? 4.8 : 3.6, lv >= 3);
@@ -1145,11 +1167,55 @@ export class Economy {
     this.updateCoins(dt, hero);
     this.updatePads(dt, hero);
     this.updateTowers(dt);
+    this.updateGates(dt);
     this.updateWorkers(dt);
     this.updateTraps(dt);
     this.updateStructures(dt);
     this.updateAnimations(dt);
     return chopping;
+  }
+
+  snapshot(): EconomySnapshot {
+    const base = this.pads.filter((p) => !p.temp);
+    const built: Array<[number, number]> = [];
+    base.forEach((pad, i) => {
+      if (pad.kind === 'keep' || pad.kind === 'offer') return;
+      if (pad.kind === 'gate') {
+        const g = this.gates[pad.side];
+        if (g) built.push([i, g.level]);
+      } else if (pad.kind === 'tower') {
+        const t = this.towers.find((tower) => tower.pad === pad);
+        if (t) built.push([i, t.level]);
+      } else if (!pad.active) {
+        built.push([i, 1]);
+      }
+    });
+    return { wood: this.wood, gold: this.gold, tier: this.tier, built };
+  }
+
+  /** Rebuilds a snapshot on a freshly reset economy. */
+  restore(s: EconomySnapshot): void {
+    const base = this.pads.filter((p) => !p.temp);
+    const keep = base.find((p) => p.kind === 'keep');
+    while (keep && this.tier < Math.min(3, s.tier)) this.raiseKeep(keep);
+    for (const [i, level] of s.built) {
+      const pad = base[i];
+      if (!pad || !pad.active) continue;
+      this.build(pad);
+      for (let l = 2; l <= level; l++) {
+        const ring = pad.kind === 'gate' ? pad : this.pads.find((p) => p.owner?.pad === pad);
+        if (ring && ring.active && ring.mode === 'upgrade') this.upgrade(ring);
+      }
+    }
+    this.wood = Math.max(0, s.wood);
+    this.gold = Math.max(0, s.gold);
+    this.syncStack();
+    this.api.onResources();
+  }
+
+  /** Completes an offer ring as if paid for, used when resuming a run. */
+  forceComplete(pad: Pad): void {
+    if (this.pads.includes(pad)) this.complete(pad);
   }
 
   get stats() {

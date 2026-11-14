@@ -5,10 +5,10 @@ import { MAPS } from '../src/maps';
 import { reseed } from '../src/rng';
 
 reseed(7);
-const KINDS: EnemyKind[] = ['Minion', 'Runner', 'Warrior', 'Hexer', 'Boss'];
+const KINDS: EnemyKind[] = ['Minion', 'Runner', 'Warrior', 'Hexer', 'Shieldbearer', 'Archer', 'Sapper', 'Boss'];
 for (const map of MAPS) {
   console.log(`\n=== ${map.name} (${map.waves} waves) ===`);
-  console.log('wave  ' + KINDS.map((k) => k.padStart(7)).join('') + '   foes  totalHP  bossHP');
+  console.log('wave  ' + KINDS.map((k) => k.slice(0, 6).padStart(7)).join('') + '   foes  totalHP  bossHP');
   for (let w = 1; w <= map.waves; w++) {
     const comp = waveComposition(w, map, CALM);
     const counts = KINDS.map((k) => comp.filter((c) => c === k).length);

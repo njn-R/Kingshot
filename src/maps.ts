@@ -1,4 +1,4 @@
-import type { RangedAttack, TowerKind, WaveRules } from './data';
+import type { Gear, RangedAttack, TowerKind, WaveRules } from './data';
 
 export interface BossDef {
   name: string;
@@ -9,7 +9,15 @@ export interface BossDef {
   ranged?: RangedAttack & { spread: number };
   /** Raises minions around itself. */
   summon?: { interval: number; count: number };
+  gear?: Gear;
+  /** A telegraphed attack: a ground slam, a charge (slams too), or a nova of orbs. */
+  special: 'slam' | 'charge' | 'nova';
+  /** What happens at half health, shown as a banner. */
+  enrage: string;
 }
+
+/** A river across one approach, crossed only by a bridge on the road. */
+export interface River { side: number; distance: number; width: number }
 
 export interface MapLook {
   ground: string;
@@ -43,6 +51,9 @@ export interface MapDef extends WaveRules {
   forest: string[];
   boss: BossDef;
   look: MapLook;
+  /** A map that must be held before this one opens. */
+  unlock?: string;
+  river?: River;
 }
 
 export const MAPS: MapDef[] = [
@@ -69,7 +80,7 @@ export const MAPS: MapDef[] = [
       { tower: 'ballista', x: -6.5, z: 14 }, { tower: 'beacon', x: 5.5, z: 15 },
     ],
     forest: ['trees_A_large', 'trees_B_large', 'tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_C'],
-    boss: { name: 'Bone Tyrant', model: 'Skeleton_Warrior', glow: 0 },
+    boss: { name: 'Bone Tyrant', model: 'Skeleton_Warrior', glow: 0, gear: { right: 'Skeleton_Axe', left: 'Skeleton_Shield_Large_A' }, special: 'charge', enrage: 'The Bone Tyrant is enraged and charges' },
     look: {
       ground: '#5f8f3a',
       blotches: ['rgba(74,120,44,0.5)', 'rgba(120,160,62,0.4)', 'rgba(52,100,44,0.4)', 'rgba(146,168,74,0.28)'],
@@ -81,12 +92,51 @@ export const MAPS: MapDef[] = [
     },
   },
   {
+    id: 'thornford',
+    name: 'Thornford',
+    blurb: 'A river guards the north road; shieldbearers hold the bridge.',
+    difficulty: 'Steady',
+    winBonus: 180,
+    waves: 13, hpScale: 1.3, hordeScale: 1.15, runnerRate: 0.8, hexerRate: 0.7, shieldRate: 1.6, sapperRate: 1.2,
+    unlock: 'greenhollow',
+    buildingColor: 'blue',
+    openSides: [0, 1, 3],
+    river: { side: 0, distance: 44, width: 9 },
+    buildings: [
+      ['church', -11, -11, 0.5, 2.6], ['market', 11, -11, -0.5, 2.4], ['home_A', -14, 9, 2.2, 2.4], ['home_B', 12, 12, -2.4, 2.2],
+      ['blacksmith', -15, -2, 1.4, 2.3], ['windmill', 16, -5.5, -1.6, 2.4], ['well', 5, 6, 0.3, 2],
+    ],
+    props: [
+      ['tent', -6, 14, 0.6, 2.6, 2], ['resource_lumber', 7, -14, 0.3, 2.6, 1.3],
+    ],
+    trees: [[3, -12], [-14, 5], [-8, -2], [9, 2], [-3, -9], [-9, 8], [3, 11], [15, -6]],
+    pads: [
+      { tower: 'ballista', x: -5, z: -13 }, { tower: 'catapult', x: 5, z: -6 }, { tower: 'beacon', x: 6, z: -15 },
+      { tower: 'ballista', x: -6, z: 14 }, { tower: 'ballista', x: 14, z: 7 },
+    ],
+    forest: ['trees_A_large', 'trees_B_large', 'trees_A_medium', 'tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_C'],
+    boss: {
+      name: 'Bridge Warden', model: 'Skeleton_Warrior', glow: 0x60d0a0, gear: { right: 'Skeleton_Blade', left: 'Skeleton_Shield_Large_A' },
+      special: 'slam', enrage: 'The Bridge Warden raises the drowned', summon: { interval: 9, count: 2 },
+    },
+    look: {
+      ground: '#6f8a3c',
+      blotches: ['rgba(98,128,52,0.5)', 'rgba(150,140,60,0.35)', 'rgba(70,104,48,0.4)', 'rgba(170,120,60,0.25)'],
+      road: 'rgba(160,126,84,0.55)',
+      specks: ['rgba(40,60,20,0.16)', 'rgba(230,200,120,0.14)'],
+      sky: 0xe8c08a, hemi: [0xe6ecff, 0x6c6444, 1.75], sun: [0xffdcb0, 2.6],
+      stone: [0.8, 0.92, 1.2], foliage: [1.25, 1.0, 0.55], weather: 'none',
+      swatch: ['#6f8a3c', '#4f8fc0'],
+    },
+  },
+  {
     id: 'frostmere',
     name: 'Frostmere',
     blurb: 'Two gates, walled flanks, and swift runners on the ice.',
     difficulty: 'Steady',
     winBonus: 250,
-    waves: 15, hpScale: 1.6, hordeScale: 1.3, runnerRate: 1.6, hexerRate: 0.8,
+    waves: 15, hpScale: 1.6, hordeScale: 1.3, runnerRate: 1.6, hexerRate: 0.8, archerRate: 1.2,
+    unlock: 'thornford',
     buildingColor: 'yellow',
     openSides: [0, 1],
     buildings: [
@@ -101,7 +151,7 @@ export const MAPS: MapDef[] = [
       { tower: 'ballista', x: -7, z: -14 }, { tower: 'catapult', x: 3.5, z: -5 }, { tower: 'beacon', x: 7, z: -14 },
       { tower: 'ballista', x: 7, z: 14 }, { tower: 'catapult', x: -3.5, z: 9 }, { tower: 'beacon', x: -7, z: 13 },
     ],
-    boss: { name: 'Frost Lich', model: 'Skeleton_Mage', glow: 0x3a90ff, ranged: { range: 15, interval: 2.4, damage: 10, spread: 3 } },
+    boss: { name: 'Frost Lich', model: 'Skeleton_Mage', glow: 0x3a90ff, ranged: { range: 15, interval: 2.4, damage: 10, spread: 3 }, gear: { right: 'Skeleton_Staff' }, special: 'nova', enrage: 'The Frost Lich calls her hexers' },
     forest: ['trees_A_large', 'trees_B_large', 'trees_A_medium', 'rock_single_A', 'rock_single_C', 'rock_single_D'],
     look: {
       ground: '#d5e2ea',
@@ -119,7 +169,8 @@ export const MAPS: MapDef[] = [
     blurb: 'A burned town under siege by tougher foes and hexers.',
     difficulty: 'Hard',
     winBonus: 500,
-    waves: 15, hpScale: 2, hordeScale: 1.45, runnerRate: 1, hexerRate: 2,
+    waves: 15, hpScale: 2, hordeScale: 1.45, runnerRate: 1, hexerRate: 2, sapperRate: 1.5, shieldRate: 1.3,
+    unlock: 'frostmere',
     buildingColor: 'red',
     openSides: [0, 1, 2, 3],
     buildings: [
@@ -134,7 +185,7 @@ export const MAPS: MapDef[] = [
       { tower: 'ballista', x: -5, z: -6 }, { tower: 'catapult', x: 13, z: -5.5 }, { tower: 'beacon', x: 0, z: 8 },
       { tower: 'ballista', x: -6.5, z: 15 }, { tower: 'catapult', x: 7, z: 15 }, { tower: 'beacon', x: -11, z: -5.5 },
     ],
-    boss: { name: 'Ash Colossus', model: 'Skeleton_Warrior', glow: 0xff4a10, summon: { interval: 7, count: 3 } },
+    boss: { name: 'Ash Colossus', model: 'Skeleton_Warrior', glow: 0xff4a10, summon: { interval: 7, count: 3 }, gear: { right: 'Skeleton_Blade' }, special: 'slam', enrage: 'The Ash Colossus burns the ground it walks' },
     forest: ['trees_A_cut', 'trees_B_cut', 'tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_D', 'rock_single_C'],
     look: {
       ground: '#544640',

@@ -17,7 +17,7 @@ describe('seeded random', () => {
       expect(r).toBeGreaterThanOrEqual(0);
       expect(r).toBeLessThan(1);
     }
-    expect(rngState()).not.toBe(before);
+    expect(rngState()).not.toEqual(before);
   });
 
   it('shuffles in place without losing anything', () => {

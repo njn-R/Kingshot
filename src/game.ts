@@ -1,22 +1,27 @@
 import * as THREE from 'three';
+import { ABILITIES, type AbilityContext } from './abilities';
+import { ACHIEVEMENTS, type Achievement, type RunEnd } from './achievements';
 import { Actor } from './actor';
 import { Ally } from './allies';
+import { track } from './analytics';
 import type { Assets } from './assets';
+import { CLASSES, classById, type HeroClass } from './classes';
+import type { Daily } from './daily';
 import {
-  CALM, CARDS, ENEMIES, INTEREST, META, RELICS, TOWERS, WARES, WEAPONS, WEAPON_PRICE, baseUpgrades, callBonus, enemyHp, interestCap, isBossWave,
-  warePrice, waveComposition, waveOptions, xpForLevel, type EnemyKind, type RelicId, type Upgrades, type Ware, type WaveOption, type Weapon, type WeaponId,
+  CALM, CARDS, ENDLESS_CARDS, ENEMIES, ENEMY_NOTES, INTEREST, KEYSTONES, META, RELICS, TOWERS, WARES, WEAPONS, WEAPON_PRICE, baseUpgrades, callBonus, enemyHp,
+  interestCap, isBossWave, warePrice, waveComposition, waveOptions, xpForLevel,
+  type Card, type EnemyKind, type RelicId, type Upgrades, type Ware, type WaveOption, type Weapon, type WeaponId,
 } from './data';
-import { Economy, type FeelEvent, type Pad } from './economy';
+import { Economy, type EconomySnapshot, type FeelEvent, type Pad } from './economy';
 import { Fx } from './fx';
 import { Hero, type Input } from './hero';
 import { ELITES, Horde, besideWall, type Elite, type Enemy } from './horde';
 import type { Choice, Hud } from './hud';
-import type { MapDef } from './maps';
+import { MAPS, type MapDef } from './maps';
 import { Projectiles } from './projectiles';
-import { pick, rand, shuffle } from './rng';
+import { draw, pick, rand, reseed, restoreRng, rngState } from './rng';
 import { save } from './save';
-import { settings } from './settings';
-import { track } from './analytics';
+import { keyLabel, settings } from './settings';
 import type { Sfx } from './sfx';
 import { Tutorial } from './tutorial';
 import { Wilds, normalized, type Site } from './wilds';
@@ -50,19 +55,36 @@ const DUST = 0xb9a584;
 const GOLD = 0xffd24a;
 const ELITE_WAVE = 4;
 const ELITE_CHANCE = 0.08;
-const VOLLEY_COOLDOWN = 10;
-const VOLLEY_BOLTS = 18;
-const BASH_COOLDOWN = 14;
-const BASH_RADIUS = 5.5;
-const BASH_PUSH = 4.5;
-const BASH_STUN = 0.9;
-const BASH_DAMAGE = 3;
-const WARDEN_RED = 0xb3202c;
+const KEYSTONE_LEVEL = 5;
+const KEYSTONE_CHANCE = 0.18;
+const WHIRL_TICK = 0.25;
+const WHIRL_REACH = 4.5;
+const SNAPSHOT_VERSION = 1;
 
 interface Merchant { root: THREE.Object3D; actor: Actor; offers: Pad[]; leaveAt: number }
 
+/** A run saved between waves, enough to rebuild it from the menu. */
+export interface RunSnapshot {
+  v: number; map: string; cls: string; daily: string | null; dailySeed: number; wave: number; endless: boolean;
+  hp: number; xp: number; level: number; kills: number; elapsed: number; taken: string[]; relics: string[]; weapon: string;
+  rng: [number, number]; economy: EconomySnapshot; ranger: number; streak: number; gatesLost: number; phoenixUsed: boolean;
+  runStats: Game['runStats']; seen: string[];
+}
+
+/** Whether something read from the save is a run this build can resume. */
+export function isSnapshot(x: unknown): x is RunSnapshot {
+  const s = x as RunSnapshot | null;
+  return !!s && typeof s === 'object' && s.v === SNAPSHOT_VERSION && MAPS.some((m) => m.id === s.map) && CLASSES.some((c) => c.id === s.cls)
+    && typeof s.wave === 'number' && !!s.economy && Array.isArray(s.taken);
+}
+
+const ALL_CARDS: Card[] = [...CARDS, ...KEYSTONES, ...ENDLESS_CARDS];
+
 /** Rounds a fractional amount up or down at random, keeping its average. */
 const roll = (x: number) => Math.max(1, Math.floor(x) + (rand() < x % 1 ? 1 : 0));
+
+/** Plural names for the first sighting banner. */
+const PLURAL: Partial<Record<EnemyKind, string>> = { Hexer: 'Hexers', Shieldbearer: 'Shieldbearers', Archer: 'Skeleton archers', Sapper: 'Sappers' };
 
 /** One run on one map: the hero, the horde, the economy and the waves that bind them. */
 export class Game {
@@ -83,13 +105,18 @@ export class Game {
   private obstacles: Obstacle[];
   private walls: WallFade;
   private updateWeather: (dt: number, focus: THREE.Vector3) => void;
+  private cls: HeroClass = CLASSES[0];
+  private daily: Daily | null = null;
   private ranger: Ally | null = null;
+  private rangerPad: Pad | null = null;
   private sellsword: Ally | null = null;
   private merchant: Merchant | null = null;
   private campQueue: Array<{ kind: EnemyKind; x: number; z: number }> = [];
   private hp = 100;
   private upgrades: Upgrades = baseUpgrades();
   private taken = new Map<string, number>();
+  /** Every boon taken, in order, so a resumed run can replay them. */
+  private takenOrder: string[] = [];
   private xp = 0;
   private level = 1;
   private pendingCards = 0;
@@ -119,8 +146,24 @@ export class Game {
   private frame = 0;
   private camFocus = new THREE.Vector3();
   private heroInside = true;
+  /** Timed effects from abilities. */
+  private boostMul = 1;
+  private boostTime = 0;
+  private invulnTime = 0;
+  private stealthTime = 0;
+  private empowerMul = 1;
+  private empowerTime = 0;
+  private whirlTime = 0;
+  private whirlTick = 0;
+  private phoenixUsed = false;
+  private gatesLost = 0;
+  private seen = new Set<EnemyKind>();
+  /** Set while a saved run is being rebuilt, to keep the fanfare quiet. */
+  private restoring = false;
   /** Counts for the run record and achievements. */
   private runStats = { bosses: 0, elites: 0, camps: 0, chests: 0, built: 0 };
+  /** One line for the share button, set when a run ends. */
+  shareText = '';
 
   constructor(private assets: Assets, private camera: THREE.PerspectiveCamera, private hud: Hud, readonly sfx: Sfx, readonly map: MapDef) {
     this.sun = buildLighting(this.scene, map.look);
@@ -128,20 +171,21 @@ export class Game {
     this.updateWeather = buildWeather(this.scene, map.look.weather);
 
     this.hero = new Hero(assets, this.scene);
-    this.hero.setBody('Knight', WARDEN_RED, true);
-    this.hero.equip(WEAPONS.crossbow);
+    this.hero.setBody(this.cls.model, this.cls.accent, this.cls.crest);
+    this.hero.equip(WEAPONS[this.cls.weapon]);
 
     this.economy = new Economy(this.scene, assets, this.obstacles, this.hero.root, {
       nearest: (from, range) => this.horde.nearest(from, range)?.actor.root.position ?? null,
-      fire: (from, target, damage, count) => {
+      fire: (from, target, damage, count, chain) => {
         this.sfx.shoot(true);
         this.fx.burst(from.x, from.y, from.z, GOLD, 2, 4, 0.12);
-        this.shots.fire(from, target, damage, count, 0);
+        this.shots.fire(from, target, damage, count, 0, chain);
       },
-      lob: (from, target, radius, burn) => this.shots.lob(from, target, radius, burn, TOWERS.catapult.damage + this.upgrades.towerDamage),
+      lob: (from, target, radius, burn) => this.shots.lob(from, target, radius, burn, Math.round((TOWERS.catapult.damage + this.upgrades.towerDamage) * this.upgrades.towerDamageMul)),
       aura: (x, z, radius, damage, slow, freeze) => { this.horde.aura(x, z, radius, damage, slow, freeze); },
       trap: (x, z, radius) => this.horde.trapPulse(x, z, radius),
       upgraded: (text, x, z) => {
+        if (this.restoring) return;
         this.sfx.build();
         this.sfx.levelUp();
         this.fx.ring(x, z, GOLD, 6);
@@ -150,14 +194,15 @@ export class Game {
         this.hud.banner(text);
       },
       keepRaised: (tier, x, z) => {
+        this.upgrades.maxHp += KEEP_HP;
+        this.hp = Math.min(this.upgrades.maxHp, this.hp + KEEP_HP);
+        this.refreshHud();
+        if (this.restoring) return;
         this.sfx.levelUp();
         this.fx.ring(x, z, GOLD, 9);
         this.fx.burst(x, 4, z, GOLD, 40, 12, 0.26);
         this.fx.shake(0.4);
-        this.upgrades.maxHp += KEEP_HP;
-        this.hp = Math.min(this.upgrades.maxHp, this.hp + KEEP_HP);
         this.hud.banner(tier === 2 ? 'Keep II: beacons, cottages, a ranger' : 'Keep III: the mine and tier III towers');
-        this.refreshHud();
       },
       onResources: () => this.refreshHud(),
       feel: (event, x, z, progress) => this.feel(event, x, z, progress ?? 0),
@@ -166,24 +211,27 @@ export class Game {
     this.horde = new Horde(this.scene, assets, this.fx, this.sfx, map, this.obstacles, this.economy, {
       hero: () => this.hero.position,
       heroInside: () => this.heroInside,
-      speedMul: () => this.current.mod.speed ?? 1,
-      hpFor: (kind) => Math.round(enemyHp(kind, Math.max(1, this.wave), this.map) * (1 + this.past * ENDLESS_HP)),
-      castOrb: (from, damage, spread) => this.shots.castOrb(from, damage, spread),
+      heroHidden: () => this.stealthTime > 0,
+      speedMul: () => (this.current.mod.speed ?? 1) * (this.daily?.mod.speed ?? 1),
+      hpFor: (kind) => Math.max(1, Math.round(enemyHp(kind, Math.max(1, this.wave), this.map) * (1 + this.past * ENDLESS_HP) * (this.daily?.mod.hp ?? 1))),
+      castOrb: (from, damage, spread, arrows) => this.shots.castOrb(from, damage, spread, arrows),
       killed: (e) => this.killed(e),
       bossSpawned: () => this.hud.boss(this.map.boss.name),
       bossHealth: (fraction) => this.hud.bossHealth(fraction),
       bossFell: () => { this.hud.boss(null); this.slowmo = BOSS_DEATH_SLOWMO; this.runStats.bosses++; },
+      bossEnraged: () => this.hud.banner(this.map.boss.enrage),
+      heroStruck: (damage) => this.strike(damage),
+      ignite: (x, z, radius, seconds) => this.shots.ignite(x, z, radius, seconds),
+      radialOrbs: (from, count, damage) => this.shots.radialOrbs(from, count, damage),
+      bossPower: () => 1 + this.wave * 0.04 + this.past * 0.1,
     });
     this.shots = new Projectiles(this.scene, assets, this.fx, this.sfx, {
       pool: () => this.horde.pool,
-      damage: (e, amount, dir, quiet) => this.horde.damage(e, amount, dir, quiet),
+      damage: (e, amount, dir, quiet, source) => this.horde.damage(e, amount, dir, quiet, source),
+      blast: (x, z, radius, amount, push, quiet) => this.horde.blast(x, z, radius, amount, push, quiet),
+      slow: (e, factor, seconds) => this.horde.slow(e, factor, seconds),
       hero: () => this.hero.position,
-      heroHit: (damage) => {
-        this.hurtHero(damage);
-        this.showHurt();
-        this.refreshHud();
-        if (this.hp <= 0 && !this.over) this.endRun(false);
-      },
+      heroHit: (damage) => this.strike(damage),
       shake: (amount) => this.fx.shake(amount),
     });
     this.wilds = new Wilds(this.scene, assets, this.obstacles, map.openSides, {
@@ -192,17 +240,23 @@ export class Game {
       announce: (text) => this.hud.banner(text),
       padClearance: (x, z) => this.economy.padClearance(x, z),
     });
-    hud.abilityLabels([{ title: 'Volley', key: 'Q' }, { title: 'Bash', key: 'E' }]);
     this.reset();
   }
 
   get weaponId(): WeaponId { return this.hero.weapon.id; }
   get running(): boolean { return this.started && !this.over; }
+  get heroClass(): HeroClass { return this.cls; }
   /** What the music should play to. */
   get mood(): 'rest' | 'fight' | 'boss' {
     if (!this.running) return 'rest';
     if (this.horde.boss) return 'boss';
     return this.toSpawn.length > 0 || this.horde.waveAlive ? 'fight' : 'rest';
+  }
+  /** Waves past the map's last, in endless. */
+  private get past(): number { return Math.max(0, this.wave - this.map.waves); }
+  private get streakMul(): number { return 1 + Math.min(1, this.streak / STREAK_FULL); }
+  private get resting(): boolean {
+    return this.running && this.cleared && this.toSpawn.length === 0 && !(this.tutorial?.holdWaves ?? false);
   }
 
   /** A number key or face button: picks a card if one is offered, else a wave option. */
@@ -211,22 +265,20 @@ export class Game {
   }
 
   setShake(on: boolean): void { this.fx.setShake(on); }
-  /** Waves past the map's last, in endless. */
-  private get past(): number { return Math.max(0, this.wave - this.map.waves); }
-  private get streakMul(): number { return 1 + Math.min(1, this.streak / STREAK_FULL); }
-  private get resting(): boolean {
-    return this.running && this.cleared && this.toSpawn.length === 0 && !(this.tutorial?.holdWaves ?? false);
-  }
+  setShadows(on: boolean): void { this.sun.castShadow = on; }
 
-  /** Begins a run on this map. */
-  start(): void {
+  /** Begins a run on this map with a class; a daily seeds everything, a snapshot resumes a saved run. */
+  start(cls: HeroClass = this.cls, daily: Daily | null = null, snapshot: RunSnapshot | null = null): void {
+    this.cls = cls;
+    this.daily = daily;
+    reseed(daily ? daily.seed : (Math.random() * 0xffffffff) >>> 0);
     this.reset();
     this.started = true;
-    track('run_start', { map: this.map.id });
-    if (!save.data.tutorialDone && this.map.id === 'greenhollow') this.tutorial = new Tutorial(this.scene);
+    if (snapshot) { this.resume(snapshot); return; }
+    track('run_start', { map: this.map.id, cls: cls.id, daily: !!daily });
+    if (daily) this.hud.banner(`Daily: ${daily.mod.title}`);
+    if (!save.data.tutorialDone && this.map.id === 'greenhollow' && !daily) this.tutorial = new Tutorial(this.scene);
   }
-
-  setShadows(on: boolean): void { this.sun.castShadow = on; }
 
   /** Stops play and lets the map idle behind the menu. */
   toMenu(): void {
@@ -248,17 +300,32 @@ export class Game {
 
   /** A weapon the hero doesn't carry, for chests and the merchant. */
   private otherWeapon(): Weapon {
-    return pick(Object.values(WEAPONS).filter((w) => w.id !== this.hero.weapon.id));
+    return draw.pick(Object.values(WEAPONS).filter((w) => w.id !== this.hero.weapon.id));
+  }
+
+  /** Names the ability buttons after the class and the keys bound to them. */
+  refreshAbilityLabels(): void {
+    const keys = settings.data.keys;
+    this.hud.abilityLabels(this.cls.abilities.map((id, i) => ({
+      title: ABILITIES[id].title, key: keyLabel((i === 0 ? keys.ability1 : keys.ability2)[0] ?? ''),
+    })));
   }
 
   reset(): void {
-    Object.assign(this.upgrades, baseUpgrades());
-    for (const item of META) item.apply(this.upgrades, save.level(item.id));
+    const u = this.upgrades;
+    Object.assign(u, baseUpgrades());
+    for (const item of META) item.apply(u, save.level(item.id));
+    this.cls.apply(u);
+    const mod = this.daily?.mod;
+    if (mod?.heroSpeed) u.speed *= mod.heroSpeed;
+    if (mod?.heroHp) u.maxHp = Math.round(u.maxHp * mod.heroHp);
+    u.towerRange = mod?.towerRange ?? 1;
     this.tutorial?.dispose();
     this.tutorial = null;
     this.paused = false;
     this.taken.clear();
-    this.hp = this.upgrades.maxHp;
+    this.takenOrder = [];
+    this.hp = u.maxHp;
     this.xp = 0;
     this.level = 1;
     this.pendingCards = 0;
@@ -276,8 +343,15 @@ export class Game {
     this.horde.reset();
     this.shots.clear();
     this.abilityCooldown = [0, 0];
+    this.boostMul = this.empowerMul = 1;
+    this.boostTime = this.invulnTime = this.stealthTime = this.empowerTime = this.whirlTime = this.whirlTick = 0;
+    this.phoenixUsed = false;
+    this.gatesLost = 0;
+    this.seen.clear();
+    this.hero.setBody(this.cls.model, this.cls.accent, this.cls.crest);
     this.hero.reset();
-    this.hero.equip(WEAPONS.crossbow);
+    this.hero.equip(WEAPONS[this.cls.weapon]);
+    this.refreshAbilityLabels();
     this.camFocus.copy(this.hero.position);
     this.heroInside = true;
     this.runStats = { bosses: 0, elites: 0, camps: 0, chests: 0, built: 0 };
@@ -293,14 +367,15 @@ export class Game {
     this.shotsFired = 0;
     this.emberTimer = 0;
     this.wardReady = 0;
+    this.shareText = '';
     this.ranger?.dispose();
     this.ranger = null;
     this.sellsword?.dispose();
     this.sellsword = null;
     if (this.merchant) { this.scene.remove(this.merchant.root); this.merchant = null; }
     this.economy.reset();
-    this.economy.grant(this.upgrades.startWood, this.upgrades.startGold);
-    this.offerRanger();
+    this.economy.grant(u.startWood + (mod?.startWood ?? 0), u.startGold + (mod?.startGold ?? 0));
+    this.rangerPad = this.offerRanger();
     this.wilds.reset();
     this.refreshHud();
   }
@@ -314,6 +389,9 @@ export class Game {
   }
 
   private feel(event: FeelEvent, x: number, z: number, progress: number): void {
+    if (event === 'build') this.runStats.built++;
+    if (event === 'gateBreak') this.gatesLost++;
+    if (this.restoring) return;
     switch (event) {
       case 'chop':
         this.sfx.chop();
@@ -334,7 +412,6 @@ export class Game {
         this.sfx.pay(progress);
         break;
       case 'build':
-        this.runStats.built++;
         this.sfx.build();
         this.fx.burst(x, 0.6, z, DUST, 26, 9, 0.3);
         this.fx.ring(x, z, 0xffe9b0, 6);
@@ -377,6 +454,57 @@ export class Game {
     }
   }
 
+  // ---- Saving and resuming between waves ----
+
+  private snapshot(): RunSnapshot {
+    return {
+      v: SNAPSHOT_VERSION, map: this.map.id, cls: this.cls.id, daily: this.daily?.key ?? null, dailySeed: this.daily?.seed ?? 0, wave: this.wave, endless: this.endless,
+      hp: Math.round(this.hp), xp: this.xp, level: this.level, kills: this.kills, elapsed: this.elapsed, taken: [...this.takenOrder],
+      relics: [...this.relics], weapon: this.hero.weapon.id, rng: rngState(), economy: this.economy.snapshot(), ranger: this.ranger?.level ?? 0,
+      streak: this.streak, gatesLost: this.gatesLost, phoenixUsed: this.phoenixUsed, runStats: { ...this.runStats }, seen: [...this.seen],
+    };
+  }
+
+  /** Rebuilds a saved run on a freshly reset game, resting before the next wave. */
+  private resume(s: RunSnapshot): void {
+    this.restoring = true;
+    for (const id of s.taken) {
+      const card = ALL_CARDS.find((c) => c.id === id);
+      if (!card) continue;
+      card.apply(this.upgrades);
+      this.taken.set(id, (this.taken.get(id) ?? 0) + 1);
+      this.takenOrder.push(id);
+    }
+    for (const id of s.relics) {
+      const relic = RELICS.find((r) => r.id === id);
+      if (!relic) continue;
+      this.relics.add(relic.id);
+      relic.apply?.(this.upgrades);
+    }
+    this.economy.restore(s.economy);
+    for (let i = 0; i < s.ranger && this.rangerPad; i++) this.economy.forceComplete(this.rangerPad);
+    this.restoring = false;
+    const weapon = WEAPONS[s.weapon as WeaponId];
+    if (weapon) this.hero.equip(weapon);
+    this.wave = s.wave;
+    this.endless = s.endless;
+    this.xp = s.xp;
+    this.level = s.level;
+    this.kills = s.kills;
+    this.elapsed = s.elapsed;
+    this.streak = s.streak;
+    this.gatesLost = s.gatesLost;
+    this.phoenixUsed = s.phoenixUsed;
+    this.runStats = { ...this.runStats, ...s.runStats };
+    for (const k of s.seen) this.seen.add(k as EnemyKind);
+    this.hp = Math.min(this.upgrades.maxHp, Math.max(1, s.hp));
+    this.restTimer = WAVE_REST + this.upgrades.restBonus;
+    restoreRng(s.rng);
+    this.hud.banner(`Resumed before wave ${this.wave + 1}`);
+    track('run_resume', { map: this.map.id, wave: this.wave });
+    this.refreshHud();
+  }
+
   // ---- Waves ----
 
   private startWave(): void {
@@ -385,10 +513,10 @@ export class Game {
     this.current = option;
     this.options = null;
     this.cleared = false;
-    this.restTimer = WAVE_REST;
+    this.restTimer = WAVE_REST + this.upgrades.restBonus;
     this.hud.showNext(false);
-    this.upgrades.towerRange = option.mod.towerRange ?? 1;
-    this.toSpawn = waveComposition(this.wave, this.map, option.mod, option.horde * (1 + this.past * ENDLESS_HORDE));
+    this.upgrades.towerRange = (option.mod.towerRange ?? 1) * (this.daily?.mod.towerRange ?? 1);
+    this.toSpawn = waveComposition(this.wave, this.map, option.mod, option.horde * (1 + this.past * ENDLESS_HORDE) * (this.daily?.mod.horde ?? 1));
     // Every standing camp sends its own band from the woods.
     for (const camp of this.wilds.camps) {
       const kinds: EnemyKind[] = Array<EnemyKind>(1 + Math.floor(this.wave * 0.3)).fill('Minion');
@@ -408,11 +536,11 @@ export class Game {
   /** Rewards and repairs once every foe of a wave is down; ends the run after the last wave. */
   private waveCleared(): void {
     this.cleared = true;
-    this.upgrades.towerRange = 1;
+    this.upgrades.towerRange = this.daily?.mod.towerRange ?? 1;
     const heal = Math.round(this.upgrades.maxHp * WAVE_CLEAR_HEAL);
     this.hp = Math.min(this.upgrades.maxHp, this.hp + heal);
     const rent = this.economy.waveCleared();
-    const interest = Math.min(interestCap(this.wave), Math.floor(this.economy.gold * INTEREST));
+    const interest = this.daily?.mod.noInterest ? 0 : Math.min(interestCap(this.wave), Math.floor(this.economy.gold * INTEREST));
     const reward = this.current.gold;
     this.economy.grant(0, interest + reward);
     if (this.current.boon) this.pendingCards++;
@@ -424,11 +552,12 @@ export class Game {
     if (gold > 0) this.fx.number(p.x, 4.4, p.z, `+${gold} gold`, '#ffd24a', 1.2);
     this.fx.ring(p.x, p.z, 0x8fe86a, 5);
     if (this.sellsword && --this.sellsword.wavesLeft <= 0) { this.sellsword.dispose(); this.sellsword = null; }
-    if (isBossWave(this.wave, this.map)) this.pendingRelic = RELICS.some((r) => !this.relics.has(r.id));
+    if (isBossWave(this.wave, this.map)) this.pendingRelic = this.openRelics().length > 0;
     this.wilds.waveCleared(this.wave);
     this.refreshHud();
     if (this.wave >= this.map.waves && !this.endless) { this.endRun(true); return; }
     if (!this.merchant && this.wave % MERCHANT_EVERY === 0) this.merchantArrives();
+    if (!this.tutorial) save.setRun(this.snapshot());
   }
 
   /** Lays out the two ways the next wave can go. */
@@ -446,10 +575,14 @@ export class Game {
     this.hud.markChoice(index);
   }
 
+  private earlyBonus(seconds: number, wave: number): number {
+    return Math.round(callBonus(seconds, wave) * (this.relics.has('hourglass') ? 1.5 : 1));
+  }
+
   /** Starts the next wave now, paying gold for the time skipped. */
   callWave(): void {
     if (!this.resting || this.paused || this.offered || !this.options) return;
-    const bonus = callBonus(this.restTimer, this.wave + 1);
+    const bonus = this.earlyBonus(this.restTimer, this.wave + 1);
     if (bonus > 0) {
       this.economy.grant(0, bonus);
       const p = this.hero.position;
@@ -463,22 +596,27 @@ export class Game {
     const seconds = Math.ceil(this.restTimer);
     const next = this.wave + 1;
     const boss = isBossWave(next, this.map);
-    this.hud.countdown(seconds, `${boss ? `Wave ${next}: the ${this.map.boss.name}` : `Wave ${next}`} in ${seconds}s`, `Call now  +${callBonus(this.restTimer, next)} gold`);
+    this.hud.countdown(seconds, `${boss ? `Wave ${next}: the ${this.map.boss.name}` : `Wave ${next}`} in ${seconds}s`, `Call now  +${this.earlyBonus(this.restTimer, next)} gold`);
   }
 
   private spawnOne(): boolean {
     const kind = this.toSpawn[this.toSpawn.length - 1];
     const side = pick(this.map.openSides);
     const [nx, nz] = GATE_SIDES[side];
-    const dist = CAMP + 6 + rand() * 6;
-    const lateral = (rand() - 0.5) * 6;
+    const river = this.map.river?.side === side ? this.map.river : null;
+    // Across a river, foes gather on the far bank and must take the bridge.
+    const dist = river ? river.distance + river.width / 2 + 3 + rand() * 5 : CAMP + 6 + rand() * 6;
+    const lateral = (rand() - 0.5) * (river ? 4 : 6);
     const e = this.horde.spawn(kind, nx * dist + nz * lateral, nz * dist + nx * lateral, side, false);
     if (!e) return false;
     this.toSpawn.pop();
-    const eliteMul = this.current.mod.elites ?? 1;
+    const eliteMul = (this.current.mod.elites ?? 1) * (this.daily?.mod.elites ?? 1);
     if (kind !== 'Boss' && kind !== 'Hexer' && this.wave >= (eliteMul > 1 ? 2 : ELITE_WAVE) && rand() < ELITE_CHANCE * eliteMul) {
       this.horde.makeElite(e, pick(Object.keys(ELITES) as Elite[]));
     }
+    const plural = PLURAL[kind];
+    if (plural && !this.seen.has(kind) && kind !== 'Boss') this.hud.banner(`${plural}: ${ENEMY_NOTES[kind as Exclude<EnemyKind, 'Boss'>].toLowerCase()}`);
+    this.seen.add(kind);
     return true;
   }
 
@@ -514,14 +652,26 @@ export class Game {
     this.over = false;
     this.hud.hideOver();
     this.hero.actor.play('Idle_A');
-    this.restTimer = WAVE_REST;
+    this.restTimer = WAVE_REST + this.upgrades.restBonus;
     if (!this.merchant) this.merchantArrives();
+    save.setRun(this.snapshot());
     this.refreshHud();
+  }
+
+  /** Grants every achievement the run just earned and returns them. */
+  private checkAchievements(won: boolean): Achievement[] {
+    const end: RunEnd = {
+      map: this.map.id, cls: this.cls.id, won: won || this.endless, wave: this.wave, endlessHeld: this.endless ? Math.max(0, this.wave - 1 - this.map.waves) : 0,
+      gatesLost: this.gatesLost, tier: this.economy.tier, towers: this.economy.stats.towers, seconds: this.elapsed, daily: this.daily?.key ?? null,
+    };
+    const earned = ACHIEVEMENTS.filter((a) => !save.has(a.id) && a.check(save.data, end));
+    for (const a of earned) save.grant(a.id);
+    return earned;
   }
 
   private endRun(won: boolean): void {
     this.over = true;
-    track('run_end', { map: this.map.id, won, wave: this.wave, kills: this.kills, level: this.level, endless: this.endless });
+    track('run_end', { map: this.map.id, cls: this.cls.id, won, wave: this.wave, kills: this.kills, level: this.level, endless: this.endless, daily: !!this.daily });
     this.hud.showNext(false);
     if (won) this.sfx.win(); else this.sfx.lose();
     if (!won) this.fx.shake(0.8);
@@ -533,22 +683,30 @@ export class Game {
     this.tutorial = null;
     const minutes = Math.floor(this.elapsed / 60);
     const seconds = String(Math.floor(this.elapsed % 60)).padStart(2, '0');
+    const as = `as the ${this.cls.title}`;
+    const daily = this.daily ? ` on the ${this.daily.key} daily (${this.daily.mod.title})` : '';
     if (this.endless) {
       const held = Math.max(0, this.wave - 1 - this.map.waves);
       const banked = save.recordEndless(this.map, this.wave - 1, held * ENDLESS_PAY);
-      this.hud.over('The last stand ends', `You held ${held} endless ${held === 1 ? 'wave' : 'waves'}, to wave ${this.wave}, and slew ${this.kills} foes. ${banked} gold added to the treasury.`, false);
+      const notes = this.checkAchievements(true).map((a) => `New: ${a.title}${a.reward ? `, unlocks ${a.reward}` : ''}`);
+      this.shareText = `I held ${held} endless waves on ${this.map.name} ${as} in Palisade${daily}, slaying ${this.kills} skeletons.`;
+      this.hud.over('The last stand ends', `You held ${held} endless ${held === 1 ? 'wave' : 'waves'}, to wave ${this.wave}, and slew ${this.kills} foes. ${banked} gold added to the treasury.`, false, notes);
       return;
     }
     const banked = save.recordRun({
-      map: this.map, cls: 'warden', won, wave: this.wave, gold: this.economy.gold, kills: this.kills, level: this.level, seconds: this.elapsed,
-      ...this.runStats, daily: null,
+      map: this.map, cls: this.cls.id, won, wave: this.wave, gold: this.economy.gold, kills: this.kills, level: this.level, seconds: this.elapsed,
+      ...this.runStats, daily: this.daily?.key ?? null,
     });
+    const notes = this.checkAchievements(won).map((a) => `New: ${a.title}${a.reward ? `, unlocks ${a.reward}` : ''}`);
     let score = won
       ? `All ${this.map.waves} waves repelled. ${this.kills} foes slain in ${minutes}:${seconds}, at level ${this.level}.`
       : `You held until wave ${this.wave} and slew ${this.kills} foes, at level ${this.level}.`;
     score += ` ${banked} gold added to the treasury.`;
     if (won) score += ' Press on for endless waves?';
-    this.hud.over(won ? 'The hamlet stands' : 'The hamlet has fallen', score, won);
+    this.shareText = won
+      ? `I held ${this.map.name} through all ${this.map.waves} waves ${as} in Palisade${daily}, in ${minutes}:${seconds}.`
+      : `I held ${this.map.name} to wave ${this.wave} ${as} in Palisade${daily}, slaying ${this.kills} skeletons.`;
+    this.hud.over(won ? 'The hamlet stands' : 'The hamlet has fallen', score, won, notes);
   }
 
   // ---- Merchant, allies and the wilds ----
@@ -569,7 +727,7 @@ export class Game {
     this.fx.burst(spot.x, 1, spot.z, DUST, 20, 7, 0.24);
 
     const weapon = this.otherWeapon();
-    const pool = shuffle(WARES.filter((w) => (w.id !== 'mason' || this.economy.canFreeUpgrade) && (w.id !== 'sellsword' || !this.sellsword)));
+    const pool = draw.shuffle(WARES.filter((w) => (w.id !== 'mason' || this.economy.canFreeUpgrade) && (w.id !== 'sellsword' || !this.sellsword)));
     const wares: Ware[] = [{ id: 'weapon', title: weapon.title, text: weapon.text, gold: WEAPON_PRICE }, ...pool.slice(0, 2)];
     const offers: Pad[] = [];
     for (const ware of wares) {
@@ -624,20 +782,20 @@ export class Game {
   }
 
   /** The ring beside the Keep that hires the ranger, then trains them. */
-  private offerRanger(): void {
+  private offerRanger(): Pad {
     const k = this.economy.keepSpot;
     const at = this.economy.spotNear(k.x, k.z, [4.4, 5.6]);
-    this.economy.offer({
+    return this.economy.offer({
       x: at.x, z: at.z, title: 'Hire a Ranger', blurb: 'An archer who follows you', wood: 10, gold: 30, minTier: 2,
       buy: () => {
         if (!this.ranger) {
           this.ranger = new Ally(this.scene, this.assets, 'Ranger', 'bow_withString', 0, this.obstacles);
           this.ranger.place(at.x, at.z);
-          this.hud.banner('A ranger joins you');
+          if (!this.restoring) this.hud.banner('A ranger joins you');
           return { title: 'Ranger II', blurb: 'Shoots 40% faster', wood: 0, gold: 35, minTier: 2 };
         }
         this.ranger.level++;
-        this.hud.banner(`Ranger ${this.ranger.level === 2 ? 'II' : 'III'}`);
+        if (!this.restoring) this.hud.banner(`Ranger ${this.ranger.level === 2 ? 'II' : 'III'}`);
         return this.ranger.level === 2 ? { title: 'Ranger III', blurb: 'Twin arrows, +1 damage', wood: 0, gold: 55, minTier: 3 } : null;
       },
     });
@@ -646,6 +804,7 @@ export class Game {
   private updateAllies(dt: number): void {
     const ctx = {
       hero: this.hero.position,
+      rate: this.upgrades.allyRate,
       nearest: (from: THREE.Vector3, range: number) => this.horde.nearest(from, range)?.actor.root.position ?? null,
       shoot: (from: THREE.Vector3, target: THREE.Vector3, damage: number, count: number) => {
         this.sfx.shoot(true);
@@ -661,7 +820,7 @@ export class Game {
     const w = Math.max(1, this.wave);
     const kinds: EnemyKind[] = site.kind === 'chest'
       ? ['Minion', 'Minion', ...(w >= 4 ? ['Runner' as const] : [])]
-      : ['Minion', 'Minion', 'Minion', 'Warrior', ...(w >= 8 ? ['Hexer' as const] : [])];
+      : ['Minion', 'Minion', 'Minion', 'Warrior', ...(w >= 6 ? ['Shieldbearer' as const] : []), ...(w >= 8 ? ['Hexer' as const] : [])];
     kinds.forEach((kind, i) => {
       const a = (i / kinds.length) * Math.PI * 2;
       const e = this.horde.spawn(kind, site.x + Math.cos(a) * 4, site.z + Math.sin(a) * 4, this.horde.nearestOpenSide(site), false);
@@ -682,7 +841,7 @@ export class Game {
       return;
     }
     this.runStats.chests++;
-    const r = rand();
+    const r = draw.next();
     if (r < 0.15) {
       const weapon = this.otherWeapon();
       this.hero.equip(weapon);
@@ -701,12 +860,32 @@ export class Game {
 
   // ---- The hero ----
 
-  /** Takes damage on the hero, softened by armour; ends the kill streak. */
+  /** A single hit on the hero from an orb, arrow or boss attack. */
+  private strike(damage: number): void {
+    if (this.over) return;
+    this.hurtHero(damage);
+    this.showHurt();
+    this.refreshHud();
+    if (this.hp <= 0) this.endRun(false);
+  }
+
+  /** Takes damage on the hero, softened by armour; ends the kill streak. A phoenix feather saves one killing blow. */
   private hurtHero(amount: number): void {
+    if (this.invulnTime > 0) return;
     const dealt = amount * this.upgrades.armor;
     this.hp -= dealt;
     this.hurtBank += dealt;
     if (this.streak > 0) { this.streak = 0; this.refreshHud(); }
+    if (this.hp <= 0 && this.relics.has('phoenix') && !this.phoenixUsed) {
+      this.phoenixUsed = true;
+      this.hp = this.upgrades.maxHp * 0.5;
+      this.invulnTime = 1.5;
+      const p = this.hero.position;
+      this.fx.burst(p.x, 1.5, p.z, 0xff8a30, 50, 12, 0.3);
+      this.fx.ring(p.x, p.z, 0xffb060, 8);
+      this.horde.blast(p.x, p.z, 7, 6, 6);
+      this.hud.banner('The phoenix feather burns: you rise again');
+    }
     if (this.relics.has('ward') && this.elapsed >= this.wardReady) {
       this.wardReady = this.elapsed + WARD_GAP;
       const p = this.hero.position;
@@ -717,6 +896,7 @@ export class Game {
   /** Damage arrives every frame, so it is shown in small bundles. */
   private showHurt(): void {
     this.hurtTimer = HURT_GAP;
+    if (this.hurtBank <= 0) return;
     const p = this.hero.position;
     this.hero.actor.flash();
     this.sfx.hurt();
@@ -738,7 +918,7 @@ export class Game {
     this.kills++;
     if (e.elite) this.runStats.elites++;
     const p = e.actor.root.position;
-    const reward = (e.elite ? 3 : 1) * this.streakMul * this.upgrades.goldMul * (this.current.mod.gold ?? 1);
+    const reward = (e.elite ? 3 : 1) * this.streakMul * this.upgrades.goldMul * (this.current.mod.gold ?? 1) * (this.daily?.mod.gold ?? 1);
     this.economy.dropGold(p.x, p.z, roll(ENEMIES[e.kind].gold * reward));
     this.streak++;
     if (this.relics.has('vampire') && this.hp < this.upgrades.maxHp) this.hp = Math.min(this.upgrades.maxHp, this.hp + 1);
@@ -759,6 +939,12 @@ export class Game {
     this.refreshHud();
   }
 
+  /** One hit of the current weapon, with every multiplier, times `mul`. */
+  private boltDamage(mul = 1): number {
+    const u = this.upgrades;
+    return roll(u.damage * this.hero.weapon.damage * u.damageMul * (this.empowerTime > 0 ? this.empowerMul : 1) * mul);
+  }
+
   private updateHero(dt: number, input: Input): void {
     const p = this.hero.position;
     const chopping = this.economy.update(dt, p);
@@ -766,10 +952,28 @@ export class Game {
       this.hp = Math.min(this.upgrades.maxHp, this.hp + this.upgrades.regen * dt);
       this.refreshHud();
     }
-    const moving = this.hero.move(dt, input, this.upgrades.speed, this.obstacles);
+    this.boostTime = Math.max(0, this.boostTime - dt);
+    this.invulnTime = Math.max(0, this.invulnTime - dt);
+    this.stealthTime = Math.max(0, this.stealthTime - dt);
+    this.empowerTime = Math.max(0, this.empowerTime - dt);
+    const speed = this.upgrades.speed * (this.boostTime > 0 ? this.boostMul : 1);
+    const moving = this.hero.move(dt, input, speed, this.obstacles);
     if (moving && this.relics.has('embers')) {
       this.emberTimer -= dt;
       if (this.emberTimer <= 0) { this.emberTimer = EMBER_GAP; this.shots.ignite(p.x, p.z, EMBER_RADIUS, 1.6); }
+    }
+    if (this.whirlTime > 0) {
+      this.whirlTime -= dt;
+      this.whirlTick -= dt;
+      this.hero.root.rotation.y += dt * 18;
+      if (this.whirlTick <= 0) {
+        this.whirlTick = WHIRL_TICK;
+        this.horde.cleave(p, WHIRL_REACH, this.boltDamage(0.8), 3);
+        this.fx.ring(p.x, p.z, 0xffe0b0, WHIRL_REACH);
+        this.sfx.chop();
+      }
+      this.hero.animate(dt, moving, false, this.elapsed);
+      return;
     }
 
     const w = this.hero.weapon;
@@ -783,11 +987,13 @@ export class Game {
       if (this.fireTimer <= 0) {
         this.fireTimer = this.upgrades.fireInterval * w.interval;
         if (reach) {
-          this.cleave(p, reach, this.upgrades.damage * w.damage + this.upgrades.pierce * 0.6);
+          this.cleave(p, reach, this.boltDamage() + this.upgrades.pierce * 0.6);
         } else {
           this.sfx.shoot();
           const chain = this.relics.has('storm') && ++this.shotsFired % STORM_EVERY === 0;
-          this.shots.fire(p.clone().setY(1.7), tp, roll(this.upgrades.damage * w.damage), this.upgrades.arrows, this.upgrades.pierce + w.pierce, chain);
+          const u = this.upgrades;
+          this.shots.fire(p.clone().setY(1.7), tp, this.boltDamage(), u.arrows, u.pierce + w.pierce, chain, undefined,
+            { explode: u.explode + (w.blast ?? 0), frost: u.frost, bounce: u.bounce });
         }
       }
     }
@@ -795,7 +1001,7 @@ export class Game {
     this.hero.animate(dt, moving, chopping, this.elapsed);
   }
 
-  /** The greataxe: one sweeping blow at every foe within reach. */
+  /** A melee sweep at every foe within reach. */
   private cleave(p: THREE.Vector3, reach: number, damage: number): void {
     this.horde.cleave(p, reach, roll(damage));
     this.sfx.boulder();
@@ -803,42 +1009,36 @@ export class Game {
     this.fx.burst(p.x, 1, p.z, 0xffe0b0, 10, 8, 0.16);
   }
 
-  /** 0 fires a ring of bolts; 1 bashes nearby foes away and stuns them. */
+  /** Uses the class's first or second ability. */
   useAbility(index: number): void {
     if (!this.running || this.paused || this.offered || this.abilityCooldown[index] > 0) return;
-    const p = this.hero.position;
-    if (index === 0) {
-      this.abilityCooldown[0] = VOLLEY_COOLDOWN;
-      const from = p.clone().setY(1.6);
-      for (let i = 0; i < VOLLEY_BOLTS; i++) {
-        const a = (i / VOLLEY_BOLTS) * Math.PI * 2;
-        this.shots.fire(from, new THREE.Vector3(p.x + Math.cos(a) * 10, 1.5, p.z + Math.sin(a) * 10), this.upgrades.damage + 1, 1, 1);
-      }
-      this.sfx.shoot();
-      this.fx.ring(p.x, p.z, GOLD, 5);
-      this.fx.shake(0.15);
-    } else {
-      this.abilityCooldown[1] = BASH_COOLDOWN;
-      this.horde.bash(p, BASH_RADIUS, BASH_PUSH, BASH_STUN, BASH_DAMAGE);
-      this.sfx.boulder();
-      this.fx.ring(p.x, p.z, 0xffffff, BASH_RADIUS);
-      this.fx.burst(p.x, 0.5, p.z, DUST, 26, 10, 0.26);
-      this.fx.shake(0.35);
-    }
+    const ability = ABILITIES[this.cls.abilities[index]];
+    this.abilityCooldown[index] = ability.cooldown;
+    const ctx: AbilityContext = {
+      hero: this.hero.position, facing: this.hero.root.rotation.y, upgrades: this.upgrades, horde: this.horde, shots: this.shots, fx: this.fx, sfx: this.sfx,
+      boltDamage: (mul = 1) => this.boltDamage(mul),
+      boost: (mul, seconds) => { this.boostMul = mul; this.boostTime = seconds; },
+      invulnerable: (seconds) => { this.invulnTime = Math.max(this.invulnTime, seconds); },
+      stealth: (seconds) => { this.stealthTime = seconds; },
+      empower: (mul, seconds) => { this.empowerMul = mul; this.empowerTime = seconds; },
+      whirl: (seconds) => { this.whirlTime = seconds; this.whirlTick = 0; },
+      banner: (text) => this.hud.banner(text),
+    };
+    ability.use(ctx);
+    track('ability', { id: ability.id });
   }
 
   private updateAbilities(dt: number): void {
     for (let i = 0; i < 2; i++) {
       this.abilityCooldown[i] = Math.max(0, this.abilityCooldown[i] - dt / this.upgrades.cooldown);
-      const full = i === 0 ? VOLLEY_COOLDOWN : BASH_COOLDOWN;
-      this.hud.abilityCooldown(i, this.abilityCooldown[i] / full);
+      this.hud.abilityCooldown(i, this.abilityCooldown[i] / ABILITIES[this.cls.abilities[i]].cooldown);
     }
   }
 
   private updateEnemies(dt: number): void {
     this.heroInside = besideWall(this.hero.position, this.heroInside);
     const touching = this.horde.update(dt);
-    if (touching > 0) {
+    if (touching > 0 && this.stealthTime <= 0) {
       this.hurtHero(touching * dt);
       this.hurtTimer -= dt;
       if (this.hurtTimer <= 0) this.showHurt();
@@ -851,10 +1051,15 @@ export class Game {
 
   // ---- Boons and relics ----
 
+  /** Relics not yet held whose unlock, if any, has been earned. */
+  private openRelics() {
+    return RELICS.filter((r) => !this.relics.has(r.id) && (!r.unlock || save.has(r.unlock)));
+  }
+
   /** Offers three relics not yet held, after a boss falls. */
   private showRelics(): void {
     this.pendingRelic = false;
-    const open = shuffle(RELICS.filter((r) => !this.relics.has(r.id))).slice(0, 3);
+    const open = draw.shuffle(this.openRelics()).slice(0, 3);
     if (open.length === 0) return;
     this.present(`The ${this.map.boss.name} has fallen: claim a relic`, open.map((r) => ({
       title: r.title, text: r.text,
@@ -862,17 +1067,28 @@ export class Game {
     })));
   }
 
+  /** Three boons: ordinary ones while any remain, a rare keystone after level five, endless ones once all are maxed. */
   private showCards(): void {
     const open = CARDS.filter((c) => (this.taken.get(c.id) ?? 0) < c.max);
-    if (open.length === 0) { this.pendingCards = 0; return; }
-    const picked = shuffle([...open]).slice(0, 3);
+    let picked = draw.shuffle([...open]).slice(0, 3);
+    const keystoneTaken = KEYSTONES.some((k) => this.taken.has(k.id));
+    if (!keystoneTaken && this.level >= KEYSTONE_LEVEL && draw.next() < KEYSTONE_CHANCE) {
+      picked = [draw.pick(KEYSTONES), ...picked.slice(0, 2)];
+    }
+    if (picked.length < 3) picked.push(...draw.shuffle([...ENDLESS_CARDS]).slice(0, 3 - picked.length));
     this.present('Choose a boon', picked.map((card) => ({
       title: card.title, text: card.text,
       pick: () => {
         this.pendingCards--;
+        const before = this.upgrades.maxHp;
         card.apply(this.upgrades);
         this.taken.set(card.id, (this.taken.get(card.id) ?? 0) + 1);
+        this.takenOrder.push(card.id);
         if (card.id === 'vitality') this.hp += 25;
+        if (card.id === 'secondwind') this.hp += this.upgrades.maxHp / 2;
+        if (this.upgrades.maxHp > before && card.id !== 'vitality') this.hp += this.upgrades.maxHp - before;
+        this.hp = Math.min(this.hp, this.upgrades.maxHp);
+        track('boon', { id: card.id });
       },
     })));
   }
@@ -971,9 +1187,25 @@ export class Game {
 
   get debug() {
     return {
-      weapon: this.hero.weapon.id, relics: [...this.relics].join(), ranger: this.ranger?.level ?? 0, sellsword: !!this.sellsword, merchant: !!this.merchant,
-      camps: this.wilds.camps.length, sites: this.wilds.all.length, streak: this.streak, endless: this.endless, mod: this.current.mod.id,
-      hp: this.hp, wave: this.wave, kills: this.kills, active: this.horde.activeCount, over: this.over, level: this.level, cards: this.offered?.length ?? 0, ...this.economy.stats,
+      cls: this.cls.id, daily: this.daily?.key ?? null, weapon: this.hero.weapon.id, relics: [...this.relics].join(), ranger: this.ranger?.level ?? 0,
+      sellsword: !!this.sellsword, merchant: !!this.merchant, camps: this.wilds.camps.length, sites: this.wilds.all.length, streak: this.streak,
+      endless: this.endless, mod: this.current.mod.id, phase: this.horde.phase, boss: !!this.horde.boss, hp: Math.round(this.hp), maxHp: this.upgrades.maxHp,
+      wave: this.wave, kills: this.kills, active: this.horde.activeCount, over: this.over, level: this.level, cards: this.offered?.length ?? 0,
+      taken: this.takenOrder.join(), ...this.economy.stats,
+    };
+  }
+
+  /** Dev helpers for testing late-game states quickly. */
+  get cheat() {
+    return {
+      wave: (n: number) => { this.wave = n - 1; this.restTimer = 0.5; },
+      gold: (n: number) => this.economy.grant(n, n),
+      card: (id: string) => { const c = ALL_CARDS.find((x) => x.id === id); if (c) { c.apply(this.upgrades); this.takenOrder.push(id); } },
+      relic: (id: RelicId) => { const r = RELICS.find((x) => x.id === id); if (r) { this.relics.add(id); r.apply?.(this.upgrades); } },
+      boss: () => { const [nx, nz] = GATE_SIDES[this.map.openSides[0]]; this.horde.spawn('Boss', nx * (CAMP + 6), nz * (CAMP + 6), this.map.openSides[0], false); },
+      hurtBoss: (fraction: number) => { const b = this.horde.boss; if (b) this.horde.damage(b, Math.ceil(b.maxHp * fraction), new THREE.Vector3()); },
+      spawn: (kind: EnemyKind) => { const [nx, nz] = GATE_SIDES[this.map.openSides[0]]; this.horde.spawn(kind, nx * (CAMP + 6), nz * (CAMP + 6), this.map.openSides[0], false); },
+      save: () => save.setRun(this.snapshot()),
     };
   }
 }

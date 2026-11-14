@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Actor } from './actor';
 import type { Assets } from './assets';
-import { ENEMIES, type EnemyKind, type RangedAttack } from './data';
+import { ENEMIES, type EnemyKind, type Gear, type RangedAttack } from './data';
 import type { Economy, Structure } from './economy';
 import type { Fx } from './fx';
 import type { MapDef } from './maps';
@@ -78,12 +78,36 @@ export interface HordeHooks {
   speedMul(): number;
   /** Health for a foe of this kind spawned now: the wave, the map and endless scaling. */
   hpFor(kind: EnemyKind): number;
-  castOrb(from: THREE.Vector3, damage: number, spread: number): void;
+  castOrb(from: THREE.Vector3, damage: number, spread: number, arrows: boolean): void;
+  /** The hero is hidden in smoke: nobody chases. */
+  heroHidden(): boolean;
   killed(e: Enemy): void;
   bossSpawned(e: Enemy): void;
   bossHealth(fraction: number): void;
   bossFell(e: Enemy): void;
+  /** The boss reached half health. */
+  bossEnraged(e: Enemy): void;
+  /** A boss attack landed on the hero. */
+  heroStruck(damage: number): void;
+  ignite(x: number, z: number, radius: number, seconds: number): void;
+  /** Orbs flying outward in every direction. */
+  radialOrbs(from: THREE.Vector3, count: number, damage: number): void;
+  /** How hard boss attacks hit, growing with the wave. */
+  bossPower(): number;
 }
+
+/** A warning painted on the ground before a boss attack lands. */
+interface Telegraph { mesh: THREE.Mesh; fill: THREE.Mesh; time: number; duration: number; land(): void }
+
+const SPECIAL_RANGE = 16;
+const SLAM_RADIUS = 4.2;
+const SLAM_TIME = 1.1;
+const CHARGE_TIME = 0.8;
+const CHARGE_SPEED = 24;
+const CHARGE_LENGTH = 15;
+const NOVA_TIME = 1.2;
+const NOVA_RADIUS = 7;
+const telegraphMaterial = () => new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.22, depthWrite: false, toneMapped: false });
 
 /** The skeleton pool: spawning, pathing through the gates, sieges, melee and casting, and dying. */
 export class Horde {
@@ -93,6 +117,14 @@ export class Horde {
   /** Simulated seconds, used for slow and freeze timers. */
   time = 0;
   private frame = 0;
+  /** Boss state: 1 until half health, then 2; the next special; a charge in progress. */
+  phase = 1;
+  private specialTimer = 4;
+  private specialCount = 0;
+  private windup = 0;
+  private charge: { dir: THREE.Vector3; time: number; hit: boolean } | null = null;
+  private telegraphs: Telegraph[] = [];
+  private fireTrail = 0;
 
   constructor(
     private scene: THREE.Scene, private assets: Assets, private fx: Fx, private sfx: Sfx, private map: MapDef,
@@ -103,6 +135,141 @@ export class Horde {
     for (const e of this.pool) this.release(e);
     this.boss = null;
     this.time = 0;
+    this.clearBossState();
+  }
+
+  private clearBossState(): void {
+    for (const t of this.telegraphs) this.scene.remove(t.mesh);
+    this.telegraphs = [];
+    this.phase = 1;
+    this.specialTimer = 4;
+    this.specialCount = 0;
+    this.windup = 0;
+    this.charge = null;
+    this.fireTrail = 0;
+  }
+
+  /** Paints a warning on the ground; land runs when it fills. A circle, or a lane when length is given. */
+  private telegraph(x: number, z: number, radius: number, duration: number, land: () => void, length = 0, angle = 0): void {
+    const shape = length > 0 ? new THREE.PlaneGeometry(radius * 2, length).translate(0, length / 2, 0) : new THREE.CircleGeometry(radius, 40);
+    shape.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(shape, telegraphMaterial());
+    const fillMaterial = telegraphMaterial();
+    fillMaterial.opacity = 0.45;
+    const fill = new THREE.Mesh(shape, fillMaterial);
+    fill.scale.setScalar(0.01);
+    fill.position.y = 0.01;
+    mesh.add(fill);
+    mesh.position.set(x, 0.15, z);
+    mesh.rotation.y = angle;
+    this.scene.add(mesh);
+    this.telegraphs.push({ mesh, fill, time: 0, duration, land });
+  }
+
+  private updateTelegraphs(dt: number): void {
+    for (let i = this.telegraphs.length - 1; i >= 0; i--) {
+      const t = this.telegraphs[i];
+      t.time += dt;
+      const k = Math.min(1, t.time / t.duration);
+      t.fill.scale.setScalar(Math.max(0.01, k));
+      (t.mesh.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(t.time * 22) * 0.06;
+      if (k < 1) continue;
+      this.scene.remove(t.mesh);
+      this.telegraphs.splice(i, 1);
+      t.land();
+    }
+  }
+
+  /**
+   * The boss's own turn: enraging at half health, winding up and landing its special, and charging.
+   * Returns true while the boss is busy and should not walk this frame.
+   */
+  private bossTurn(e: Enemy, dt: number, hero: THREE.Vector3, frozen: boolean): boolean {
+    const p = e.actor.root.position;
+    const def = this.map.boss;
+    if (this.phase === 1 && e.hp < e.maxHp / 2) {
+      this.phase = 2;
+      e.actor.play('Hit_B', true, 0.05);
+      e.actor.setGlow(def.glow || 0xff3020);
+      this.fx.ring(p.x, p.z, 0xff3020, 10);
+      this.fx.shake(0.5);
+      this.sfx.horn(true);
+      const raise = def.special === 'nova' ? 'Hexer' : 'Minion';
+      for (let s = 0; s < 4; s++) {
+        const a = (s / 4) * Math.PI * 2 + 0.4;
+        this.spawn(raise, p.x + Math.cos(a) * 5, p.z + Math.sin(a) * 5, e.side, e.inside);
+      }
+      this.specialTimer = 1.5;
+      this.hooks.bossEnraged(e);
+    }
+    if (this.phase === 2 && def.special === 'slam' && !frozen) {
+      this.fireTrail -= dt;
+      if (this.fireTrail <= 0) { this.fireTrail = 0.45; this.hooks.ignite(p.x, p.z, 1.8, 2.5); }
+    }
+    if (this.charge) {
+      const c = this.charge;
+      c.time -= dt;
+      const prev = { x: p.x, z: p.z };
+      p.addScaledVector(c.dir, CHARGE_SPEED * dt);
+      collideWalls(p, prev, 1.2, (side) => !this.economy.hasGate(side));
+      pushOutOfObstacles(p, 1.2, this.obstacles);
+      e.actor.play('Running_A');
+      this.fx.burst(p.x, 0.4, p.z, DUST, 2, 4, 0.2);
+      if (!c.hit && Math.hypot(hero.x - p.x, hero.z - p.z) < 2.6) {
+        c.hit = true;
+        this.hooks.heroStruck(28 * this.hooks.bossPower());
+        this.fx.shake(0.6);
+      }
+      if (c.time <= 0) this.charge = null;
+      return true;
+    }
+    if (this.windup > 0) {
+      this.windup -= dt;
+      return true;
+    }
+    if (frozen) return false;
+    this.specialTimer -= dt;
+    const dist = Math.hypot(hero.x - p.x, hero.z - p.z);
+    if (this.specialTimer > 0 || dist > SPECIAL_RANGE || this.hooks.heroHidden()) return false;
+    this.specialTimer = this.phase === 2 ? 4.2 : 6.5;
+    this.specialCount++;
+    const power = this.hooks.bossPower();
+    const special = def.special === 'charge' && (this.phase === 1 || this.specialCount % 2 === 0) ? 'slam' : def.special;
+    if (special === 'slam') {
+      const tx = hero.x, tz = hero.z;
+      this.windup = SLAM_TIME;
+      e.actor.play('Use_Item', true, 0.05);
+      e.actor.root.rotation.y = Math.atan2(tx - p.x, tz - p.z);
+      this.telegraph(tx, tz, SLAM_RADIUS, SLAM_TIME, () => {
+        this.sfx.gateBreak();
+        this.fx.ring(tx, tz, 0xffb080, SLAM_RADIUS);
+        this.fx.burst(tx, 0.5, tz, DUST, 30, 11, 0.3);
+        this.fx.shake(0.5);
+        const h = this.hooks.hero();
+        if (Math.hypot(h.x - tx, h.z - tz) < SLAM_RADIUS) this.hooks.heroStruck(22 * power);
+        if (this.phase === 2) this.hooks.ignite(tx, tz, SLAM_RADIUS * 0.8, 3);
+      });
+    } else if (special === 'charge') {
+      const dir = new THREE.Vector3(hero.x - p.x, 0, hero.z - p.z).normalize();
+      this.windup = CHARGE_TIME;
+      e.actor.play('Idle_B', true, 0.05);
+      e.actor.root.rotation.y = Math.atan2(dir.x, dir.z);
+      this.telegraph(p.x, p.z, 1.4, CHARGE_TIME, () => {
+        this.charge = { dir, time: CHARGE_LENGTH / CHARGE_SPEED, hit: false };
+        this.sfx.horn(false);
+      }, CHARGE_LENGTH, Math.atan2(dir.x, dir.z) + Math.PI);
+    } else {
+      this.windup = NOVA_TIME;
+      e.actor.play('Throw', true, 0.05);
+      this.telegraph(p.x, p.z, NOVA_RADIUS, NOVA_TIME, () => {
+        const at = e.actor.root.position;
+        this.hooks.radialOrbs(at, this.phase === 2 ? 18 : 12, 9 * power);
+        this.aura(at.x, at.z, NOVA_RADIUS, 0, 0.5, false);
+        const h = this.hooks.hero();
+        if (Math.hypot(h.x - at.x, h.z - at.z) < NOVA_RADIUS) this.hooks.heroStruck(10 * power);
+      });
+    }
+    return true;
   }
 
   get activeCount(): number {
@@ -133,8 +300,24 @@ export class Horde {
         slowUntil: 0, slowFactor: 1, frozenUntil: 0, thorn: 0,
       };
       this.pool.push(e);
+      const gear = kind === 'Boss' ? this.map.boss.gear : stats.gear;
+      if (gear) this.arm(e.actor.root, gear);
     }
     return e;
+  }
+
+  /** Hangs weapon and shield models from a character's hand bones. */
+  private arm(root: THREE.Object3D, gear: Gear): void {
+    for (const [slot, name] of [['r', gear.right], ['l', gear.left]] as const) {
+      if (!name) continue;
+      let hand: THREE.Object3D | undefined;
+      const match = new RegExp('^handslot\\.?' + slot + '$', 'i');
+      root.traverse((o) => { if (match.test(o.name)) hand = o; });
+      if (!hand) continue;
+      const held = this.assets.scene(name).clone();
+      held.traverse((o) => { o.castShadow = (o as THREE.Mesh).isMesh; });
+      hand.add(held);
+    }
   }
 
   /** Puts a pooled foe into play at a point, rising from the ground. */
@@ -148,7 +331,7 @@ export class Horde {
     e.stuckFor = 0;
     e.elite = null;
     e.wild = false;
-    e.raider = !inside && rand() < RAIDER_CHANCE;
+    e.raider = !inside && (rand() < RAIDER_CHANCE || !!ENEMIES[kind].siege);
     e.target = null;
     e.retarget = 0;
     e.summonTimer = this.map.boss.summon?.interval ?? 0;
@@ -168,7 +351,7 @@ export class Horde {
       if (this.map.boss.glow) e.actor.setGlow(this.map.boss.glow);
       this.hooks.bossSpawned(e);
     }
-    e.actor.play('Spawn_Ground', true, 0);
+    e.actor.play(kind === 'Boss' ? 'Spawn_Air' : 'Spawn_Ground', true, 0);
     this.fx.burst(x, 0.3, z, DUST, kind === 'Boss' ? 24 : 5, kind === 'Boss' ? 10 : 4, 0.22);
     this.scene.add(e.actor.root);
     return e;
@@ -208,12 +391,29 @@ export class Horde {
     return best;
   }
 
-  damage(e: Enemy, amount: number, dir: THREE.Vector3, quiet = false): void {
+  /** A slow that stacks with any already on the foe. */
+  slow(e: Enemy, factor: number, seconds: number): void {
+    const current = e.slowUntil > this.time ? e.slowFactor : 1;
+    e.slowFactor = Math.min(current, factor);
+    e.slowUntil = Math.max(e.slowUntil, this.time + seconds);
+  }
+
+  damage(e: Enemy, amount: number, dir: THREE.Vector3, quiet = false, source: 'bolt' | 'other' = 'other'): void {
+    const hit = e.actor.root.position;
+    const height = ENEMIES[e.kind].scale * 1.9;
+    if (source === 'bolt' && ENEMIES[e.kind].shield) {
+      // A shield turns bolts that come at its face; flank it or use something heavier.
+      const fx = Math.sin(e.actor.root.rotation.y), fz = Math.cos(e.actor.root.rotation.y);
+      if (dir.x * fx + dir.z * fz < -0.2) {
+        this.fx.burst(hit.x, 1.2, hit.z, 0xffe9b0, 4, 4, 0.12);
+        this.fx.number(hit.x, height, hit.z, 'Blocked', '#cbbfae', 0.8);
+        this.sfx.hit();
+        return;
+      }
+    }
     e.hp -= amount;
     e.actor.flash();
     e.actor.punch();
-    const hit = e.actor.root.position;
-    const height = ENEMIES[e.kind].scale * 1.9;
     if (e.kind !== 'Boss') { hit.x += dir.x * KNOCKBACK; hit.z += dir.z * KNOCKBACK; }
     if (!quiet) {
       this.fx.number(hit.x, height, hit.z, `${amount}`, e.kind === 'Boss' ? '#ffd24a' : '#fff3d6', e.kind === 'Boss' ? 1.35 : 1);
@@ -224,7 +424,7 @@ export class Horde {
     if (e.hp > 0) return;
     e.alive = false;
     e.timer = CORPSE_TIME;
-    e.actor.play('Death_A', true, 0.08);
+    e.actor.play(Math.random() < 0.3 ? 'Death_B' : 'Death_A', true, 0.08);
     const p = e.actor.root.position;
     this.sfx.kill();
     this.fx.burst(p.x, height * 0.5, p.z, BONE, e.kind === 'Minion' ? 9 : 16, 8, 0.2);
@@ -239,7 +439,7 @@ export class Horde {
     if (e.elite === 'splitting') {
       for (const s of [-1, 1]) this.spawn('Minion', p.x + s * 1.2, p.z, e.side, e.inside);
     }
-    if (e === this.boss) { this.boss = null; this.hooks.bossFell(e); }
+    if (e === this.boss) { this.boss = null; this.clearBossState(); this.hooks.bossFell(e); }
     this.hooks.killed(e);
   }
 
@@ -304,6 +504,7 @@ export class Horde {
       if (e.kind !== 'Boss') {
         q.addScaledVector(away, push * (1 - d / (radius + 1)));
         e.frozenUntil = Math.max(e.frozenUntil, this.time + stun);
+        e.actor.play('Hit_A', true, 0.05);
       }
       this.damage(e, amount, NO_PUSH);
     }
@@ -327,6 +528,8 @@ export class Horde {
     const hero = this.hooks.hero();
     const heroInside = this.hooks.heroInside();
     const speedMul = this.hooks.speedMul();
+    const hidden = this.hooks.heroHidden();
+    this.updateTelegraphs(dt);
     let touching = 0;
     const crowded = this.activeCount > 40;
     let index = -1;
@@ -346,6 +549,8 @@ export class Horde {
         continue;
       }
       if (e.timer > 0) { e.timer -= dt; continue; }
+      if (e.kind === 'Boss' && this.bossTurn(e, dt, hero, frozen)) continue;
+      if (hidden && !e.target && !e.wild) { e.actor.play('Idle_A'); continue; }
       const prev = { x: p.x, z: p.z };
 
       // Raiders go for cottages and the mine unless the hero is close.
@@ -399,7 +604,7 @@ export class Horde {
         if (e.cooldown <= 0) {
           e.cooldown = ranged!.interval;
           e.actor.play('Throw', true, 0.05);
-          this.hooks.castOrb(p, ranged!.damage, ranged!.spread ?? 1);
+          this.hooks.castOrb(p, ranged!.damage, ranged!.spread ?? 1, !!stats.arrows);
         } else if (e.cooldown < ranged!.interval - CAST_TIME) {
           e.actor.play('Idle_A');
         }
@@ -410,9 +615,9 @@ export class Horde {
       if (frozen || inCastRange) {
         // Frozen foes are held fast; hexers hold their ground and keep casting.
       } else if (sieging) {
-        this.economy.hitStructure(e.target!, stats.dps * dt);
+        this.economy.hitStructure(e.target!, stats.dps * (stats.siege ?? 1) * dt);
       } else if (blocked) {
-        if (this.economy.hitGate(e.side, stats.dps * dt)) {
+        if (this.economy.hitGate(e.side, stats.dps * (stats.siege ?? 1) * dt)) {
           e.thorn += THORN_DPS * dt;
           if (e.thorn >= 1) {
             const owed = Math.floor(e.thorn);
@@ -426,7 +631,7 @@ export class Horde {
       } else if (dist > 1e-3) {
         prev.x = p.x;
         prev.z = p.z;
-        const step = stats.speed * (e.elite === 'swift' ? 1.6 : 1) * speedMul * dt * (e.slowUntil > this.time ? e.slowFactor : 1);
+        const step = stats.speed * (e.elite === 'swift' ? 1.6 : 1) * (e.kind === 'Boss' && this.phase === 2 ? 1.25 : 1) * speedMul * dt * (e.slowUntil > this.time ? e.slowFactor : 1);
         p.x += (dx / dist) * step;
         p.z += (dz / dist) * step;
         this.checkStuck(e, dt);
@@ -456,8 +661,9 @@ export class Horde {
   /** A cottage for foes inside the walls, the mine for raiders outside, or null to chase the hero. */
   private pickTarget(e: Enemy, hero: THREE.Vector3): Structure | null {
     const p = e.actor.root.position;
-    if (e.wild || e.kind === 'Boss' || Math.hypot(hero.x - p.x, hero.z - p.z) < 6) return null;
-    if (!e.inside && !e.raider) return null;
+    const siege = !!ENEMIES[e.kind].siege;
+    if (e.wild || e.kind === 'Boss' || (!siege && Math.hypot(hero.x - p.x, hero.z - p.z) < 6)) return null;
+    if (!e.inside && !e.raider && !siege) return null;
     let best: Structure | null = null;
     let bestD = e.inside ? 18 : 26;
     for (const s of this.economy.targets(e.inside)) {

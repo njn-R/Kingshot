@@ -12,7 +12,7 @@ describe('save migration', () => {
     expect(data.lastMap).toBe('frostmere');
     expect(data.tutorialDone).toBe(true);
     expect(data.history).toEqual([]);
-    expect(data.achievements).toEqual([]);
+    expect(data.achievements).toEqual(['win-greenhollow']); // old wins keep their unlocks
     expect(data.stats.runs).toBe(0);
   });
 

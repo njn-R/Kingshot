@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Assets } from './assets';
-import { buildingModel, type MapDef, type MapLook } from './maps';
+import { buildingModel, type MapDef, type MapLook, type River } from './maps';
 
 /** Half-width of the walled camp, and half-width of the opening in each wall. */
 export const CAMP = 28;
@@ -13,6 +13,14 @@ export interface Obstacle { x: number; z: number; r: number }
 export const WORLD_LIMIT = 68;
 /** Width of the clear meadow ring between the walls and the forest. */
 export const MEADOW = 11;
+/** Half-width of the bridge's opening in a river. */
+export const BRIDGE_HALF = 3.4;
+
+/** Distance along and across a river: where a point sits relative to its centre line. */
+export function riverFrame(river: River, x: number, z: number): { along: number; across: number } {
+  const [nx, nz] = GATE_SIDES[river.side];
+  return { along: x * nz + z * nx, across: x * nx + z * nz - river.distance };
+}
 const WALL_HALF = 0.9;
 
 /**
@@ -143,6 +151,17 @@ function buildGround(rand: () => number, map: MapDef): THREE.Mesh {
     const r = Math.sqrt(rand()) * 8;
     dirt(Math.cos(a) * r, Math.sin(a) * r, 3);
   }
+  // A river: muddy banks, then water, painted across one approach.
+  if (map.river) {
+    const r = map.river;
+    const [nx, nz] = GATE_SIDES[r.side];
+    for (let t = -GROUND_SIZE / 2; t <= GROUND_SIZE / 2; t += 0.6) {
+      const wob = Math.sin(t * 0.09) * 1.6;
+      const cx = nx * (r.distance + wob) + nz * t, cz = nz * (r.distance + wob) + nx * t;
+      blotch(toPx(cx), toPx(cz), (r.width / 2 + 2.2) * unit, 'rgba(110,92,60,0.55)');
+      blotch(toPx(cx), toPx(cz), (r.width / 2) * unit, 'rgba(52,104,150,0.9)');
+    }
+  }
   // Fine speckle stops the ground looking airbrushed up close.
   for (let i = 0; i < 26000; i++) {
     g.fillStyle = rand() > 0.5 ? look.specks[0] : look.specks[1];
@@ -233,6 +252,8 @@ export function buildWorld(scene: THREE.Scene, assets: Assets, map: MapDef): { o
     obstacles.push({ x, z, r });
   }
 
+  if (map.river) buildRiver(scene, b, assets, map.river, obstacles);
+
   // Forest outside the walls, leaving the four approach roads clear.
   const trees = map.forest;
   for (let n = 0; n < 420; n++) {
@@ -243,7 +264,8 @@ export function buildWorld(scene: THREE.Scene, assets: Assets, map: MapDef): { o
       const [nx, nz] = GATE_SIDES[side];
       return x * nx + z * nz > 0 && Math.abs(x * nz + z * nx) < 9;
     });
-    if (!outside || onRoad) continue;
+    const wet = map.river && Math.abs(riverFrame(map.river, x, z).across) < map.river.width / 2 + 3;
+    if (!outside || onRoad || wet) continue;
     const name = trees[Math.floor(rand() * trees.length)];
     const scale = 2.4 + rand() * 1.0;
     b.add(name, x, z, rand() * Math.PI * 2, scale, 0, name.startsWith('rock') ? undefined : foliage);
@@ -252,6 +274,58 @@ export function buildWorld(scene: THREE.Scene, assets: Assets, map: MapDef): { o
 
   b.build();
   return { obstacles, walls };
+}
+
+/** A shimmering water surface, the bridge on the road, and a line of obstacles along the banks except at the bridge. */
+function buildRiver(scene: THREE.Scene, b: Batcher, assets: Assets, river: River, obstacles: Obstacle[]): void {
+  const [nx, nz] = GATE_SIDES[river.side];
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(GROUND_SIZE, river.width * 0.9),
+    new THREE.MeshStandardMaterial({ color: 0x3f86c0, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.55 }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.rotation.z = nx !== 0 ? Math.PI / 2 : 0;
+  water.position.set(nx * river.distance, 0.08, nz * river.distance);
+  water.receiveShadow = true;
+  scene.add(water);
+
+  scene.add(buildBridge(river));
+  for (let t = -GROUND_SIZE / 2; t <= GROUND_SIZE / 2; t += 1.6) {
+    if (Math.abs(t) < BRIDGE_HALF + river.width / 2) continue;
+    obstacles.push({ x: nx * river.distance + nz * t, z: nz * river.distance + nx * t, r: river.width / 2 });
+  }
+  // Ruined siege engines on the far bank tell where the horde comes from.
+  b.add('siege-trebuchet-demolished', nx * (river.distance + 12) + nz * 14, nz * (river.distance + 12) + nx * 14, 0.6, 5);
+  b.add('siege-ram-demolished', nx * (river.distance + 10) - nz * 12, nz * (river.distance + 10) - nx * 12, -0.4, 4);
+  obstacles.push({ x: nx * (river.distance + 12) + nz * 14, z: nz * (river.distance + 12) + nx * 14, r: 2.4 });
+  obstacles.push({ x: nx * (river.distance + 10) - nz * 12, z: nz * (river.distance + 10) - nx * 12, r: 2 });
+}
+
+/** A plank bridge across the river on the road: deck, beams beneath, posts and rails along both sides. */
+function buildBridge(river: River): THREE.Group {
+  const [nx, nz] = GATE_SIDES[river.side];
+  const length = river.width + 4;
+  const width = BRIDGE_HALF * 2;
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.95 });
+  const group = new THREE.Group();
+  const add = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+  };
+  // Local frame: x across the road, z along it (over the water).
+  for (let z = -length / 2 + 0.35; z < length / 2; z += 0.75) add(width, 0.18, 0.66, 0, 0.42, z, (Math.round(z * 4) % 2) ? wood : dark);
+  for (const x of [-width / 2 + 0.4, width / 2 - 0.4]) add(0.4, 0.4, length, x, 0.15, 0, dark);
+  for (const side of [-1, 1]) {
+    const x = side * (width / 2 + 0.1);
+    for (let z = -length / 2 + 0.3; z <= length / 2; z += length / 4) add(0.22, 1.3, 0.22, x, 0.95, z, dark);
+    add(0.16, 0.16, length, x, 1.5, 0, wood);
+  }
+  group.position.set(nx * river.distance, 0, nz * river.distance);
+  group.rotation.y = Math.atan2(nx, nz);
+  return group;
 }
 
 /** Golden-hour light; the sun's shadow box follows `target`. */
