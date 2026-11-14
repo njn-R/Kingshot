@@ -1,0 +1,48 @@
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          # Set the repository variable PLAUSIBLE_DOMAIN to turn on analytics in the deployed build.
+          VITE_PLAUSIBLE_DOMAIN: ${{ vars.PLAUSIBLE_DOMAIN }}
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_PAGES == 'true'
+        with:
+          path: dist
+
+  # Turn on Pages (Settings > Pages > Source: GitHub Actions), then set the repository variable DEPLOY_PAGES to true.
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_PAGES == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
